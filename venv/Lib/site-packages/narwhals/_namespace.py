@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     _Dask: TypeAlias = Literal["dask"]
     _DuckDB: TypeAlias = Literal["duckdb"]
     _PandasLike: TypeAlias = Literal["pandas", "cudf", "modin"]
-    _SparkLike: TypeAlias = Literal["pyspark", "sqlframe"]
+    _SparkLike: TypeAlias = Literal["pyspark", "sqlframe", "pyspark[connect]"]
     _EagerOnly: TypeAlias = "_PandasLike | _Arrow"
     _EagerAllowed: TypeAlias = "_Polars | _EagerOnly"
     _LazyOnly: TypeAlias = "_SparkLike | _Dask | _DuckDB"
@@ -287,7 +287,7 @@ class Namespace(Generic[CompliantNamespaceT_co]):
     ) -> Namespace[CompliantNamespaceAny]: ...
 
     @classmethod
-    def from_native_object(
+    def from_native_object(  # noqa: PLR0911
         cls: type[Namespace[Any]], native: NativeAny, /
     ) -> Namespace[Any]:
         if is_native_polars(native):

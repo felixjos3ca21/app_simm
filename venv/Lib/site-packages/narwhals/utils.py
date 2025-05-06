@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Container
+from typing import Generic
 from typing import Iterable
+from typing import Iterator
 from typing import Literal
 from typing import Protocol
 from typing import Sequence
@@ -24,6 +26,7 @@ from typing import cast
 from typing import overload
 from warnings import warn
 
+from narwhals._enum import NoAutoEnum
 from narwhals.dependencies import get_cudf
 from narwhals.dependencies import get_dask
 from narwhals.dependencies import get_dask_dataframe
@@ -78,6 +81,7 @@ if TYPE_CHECKING:
     from narwhals._namespace import Namespace
     from narwhals._translate import ArrowStreamExportable
     from narwhals._translate import IntoArrowTable
+    from narwhals._translate import ToNarwhalsT_co
     from narwhals.dataframe import DataFrame
     from narwhals.dataframe import LazyFrame
     from narwhals.dtypes import DType
@@ -102,7 +106,7 @@ if TYPE_CHECKING:
     FrameOrSeriesT = TypeVar(
         "FrameOrSeriesT", bound=Union[LazyFrame[Any], DataFrame[Any], Series[Any]]
     )
-    _T = TypeVar("_T")
+
     _T1 = TypeVar("_T1")
     _T2 = TypeVar("_T2")
     _T3 = TypeVar("_T3")
@@ -150,6 +154,7 @@ if TYPE_CHECKING:
         def columns(self) -> Sequence[str]: ...
 
 
+_T = TypeVar("_T")
 NativeT_co = TypeVar("NativeT_co", covariant=True)
 CompliantT_co = TypeVar("CompliantT_co", covariant=True)
 _ContextT = TypeVar("_ContextT", bound="_FullContext")
@@ -211,35 +216,67 @@ class Version(Enum):
 
         return v1_dtypes
 
+    @property
+    def dataframe(self) -> type[DataFrame[Any]]:
+        if self is Version.MAIN:
+            from narwhals.dataframe import DataFrame
 
-class Implementation(Enum):
+            return DataFrame
+        from narwhals.stable.v1 import DataFrame as DataFrameV1
+
+        return DataFrameV1
+
+    @property
+    def lazyframe(self) -> type[LazyFrame[Any]]:
+        if self is Version.MAIN:
+            from narwhals.dataframe import LazyFrame
+
+            return LazyFrame
+        from narwhals.stable.v1 import LazyFrame as LazyFrameV1
+
+        return LazyFrameV1
+
+    @property
+    def series(self) -> type[Series[Any]]:
+        if self is Version.MAIN:
+            from narwhals.series import Series
+
+            return Series
+        from narwhals.stable.v1 import Series as SeriesV1
+
+        return SeriesV1
+
+
+class Implementation(NoAutoEnum):
     """Implementation of native object (pandas, Polars, PyArrow, ...)."""
 
-    PANDAS = auto()
-    """Pandas implementation."""
-    MODIN = auto()
+    PANDAS = "pandas"
+    """pandas implementation."""
+    MODIN = "modin"
     """Modin implementation."""
-    CUDF = auto()
+    CUDF = "cudf"
     """cuDF implementation."""
-    PYARROW = auto()
+    PYARROW = "pyarrow"
     """PyArrow implementation."""
-    PYSPARK = auto()
+    PYSPARK = "pyspark"
     """PySpark implementation."""
-    POLARS = auto()
+    POLARS = "polars"
     """Polars implementation."""
-    DASK = auto()
+    DASK = "dask"
     """Dask implementation."""
-    DUCKDB = auto()
+    DUCKDB = "duckdb"
     """DuckDB implementation."""
-    IBIS = auto()
+    IBIS = "ibis"
     """Ibis implementation."""
-    SQLFRAME = auto()
+    SQLFRAME = "sqlframe"
     """SQLFrame implementation."""
-    PYSPARK_CONNECT = auto()
+    PYSPARK_CONNECT = "pyspark[connect]"
     """PySpark Connect implementation."""
-
-    UNKNOWN = auto()
+    UNKNOWN = "unknown"
     """Unknown implementation."""
+
+    def __str__(self) -> str:
+        return str(self.value)
 
     @classmethod
     def from_native_namespace(
@@ -280,20 +317,10 @@ class Implementation(Enum):
         Returns:
             Implementation.
         """
-        mapping = {
-            "pandas": Implementation.PANDAS,
-            "modin": Implementation.MODIN,
-            "cudf": Implementation.CUDF,
-            "pyarrow": Implementation.PYARROW,
-            "pyspark": Implementation.PYSPARK,
-            "polars": Implementation.POLARS,
-            "dask": Implementation.DASK,
-            "duckdb": Implementation.DUCKDB,
-            "ibis": Implementation.IBIS,
-            "sqlframe": Implementation.SQLFRAME,
-            "pyspark_connect": Implementation.PYSPARK_CONNECT,
-        }
-        return mapping.get(backend_name, Implementation.UNKNOWN)
+        try:
+            return cls(backend_name)
+        except ValueError:
+            return Implementation.UNKNOWN
 
     @classmethod
     def from_backend(
@@ -315,7 +342,7 @@ class Implementation(Enum):
             else cls.from_native_namespace(backend)
         )
 
-    def to_native_namespace(self) -> ModuleType:
+    def to_native_namespace(self) -> ModuleType:  # noqa: C901, PLR0911
         """Return the native namespace module corresponding to Implementation.
 
         Returns:
@@ -361,9 +388,9 @@ class Implementation(Enum):
             return sqlframe
 
         if self is Implementation.PYSPARK_CONNECT:  # pragma: no cover
-            import pyspark.sql  # ignore-banned-import
+            import pyspark.sql.connect  # ignore-banned-import
 
-            return pyspark.sql
+            return pyspark.sql.connect
 
         msg = "Not supported Implementation"  # pragma: no cover
         raise AssertionError(msg)
@@ -583,28 +610,6 @@ class Implementation(Enum):
             False
         """
         return self is Implementation.SQLFRAME  # pragma: no cover
-
-    @property
-    def _alias(self) -> LiteralString:
-        """Friendly name for errors.
-
-        Returns:
-            String.
-        """
-        mapping: dict[Implementation, LiteralString] = {
-            Implementation.PANDAS: "Pandas",
-            Implementation.POLARS: "Polars",
-            Implementation.DASK: "Dask",
-            Implementation.IBIS: "Ibis",
-            Implementation.MODIN: "Modin",
-            Implementation.CUDF: "cuDF",
-            Implementation.PYARROW: "PyArrow",
-            Implementation.PYSPARK: "PySpark",
-            Implementation.DUCKDB: "DuckDB",
-            Implementation.SQLFRAME: "SQLFrame",
-            Implementation.PYSPARK_CONNECT: "PySpark Connect",
-        }
-        return mapping[self]
 
     def _backend_version(self) -> tuple[int, ...]:
         native = self.to_native_namespace()
@@ -1140,7 +1145,7 @@ def scale_bytes(sz: int, unit: SizeUnit) -> int | float:
         raise ValueError(msg)
 
 
-def is_ordered_categorical(series: Series[Any]) -> bool:
+def is_ordered_categorical(series: Series[Any]) -> bool:  # noqa: PLR0911
     """Return whether indices of categories are semantically meaningful.
 
     This is a convenience function to accessing what would otherwise be
@@ -1609,14 +1614,19 @@ def _hasattr_static(obj: Any, attr: str) -> bool:
 
 
 def is_compliant_dataframe(
-    obj: CompliantDataFrame[CompliantSeriesT, CompliantExprT, NativeFrameT_co] | Any,
-) -> TypeIs[CompliantDataFrame[CompliantSeriesT, CompliantExprT, NativeFrameT_co]]:
+    obj: CompliantDataFrame[
+        CompliantSeriesT, CompliantExprT, NativeFrameT_co, ToNarwhalsT_co
+    ]
+    | Any,
+) -> TypeIs[
+    CompliantDataFrame[CompliantSeriesT, CompliantExprT, NativeFrameT_co, ToNarwhalsT_co]
+]:
     return _hasattr_static(obj, "__narwhals_dataframe__")
 
 
 def is_compliant_lazyframe(
-    obj: CompliantLazyFrame[CompliantExprT, NativeFrameT_co] | Any,
-) -> TypeIs[CompliantLazyFrame[CompliantExprT, NativeFrameT_co]]:
+    obj: CompliantLazyFrame[CompliantExprT, NativeFrameT_co, ToNarwhalsT_co] | Any,
+) -> TypeIs[CompliantLazyFrame[CompliantExprT, NativeFrameT_co, ToNarwhalsT_co]]:
     return _hasattr_static(obj, "__narwhals_lazyframe__")
 
 
@@ -1701,7 +1711,7 @@ def _into_arrow_table(data: IntoArrowTable, context: _FullContext, /) -> pa.Tabl
         ns = ArrowNamespace(backend_version=parse_version(pa), version=version)
         return ns._dataframe.from_arrow(data, context=ns).native
     else:  # pragma: no cover
-        msg = f"PyArrow>=14.0.0 is required for `from_arrow` for object of type {type(data).__name__!r}."
+        msg = f"'pyarrow>=14.0.0' is required for `from_arrow` for object of type {type(data).__name__!r}."
         raise ModuleNotFoundError(msg)
 
 
@@ -1861,7 +1871,7 @@ class requires:  # noqa: N801
         >>> backend.really_complex_feature()
         Traceback (most recent call last):
             ...
-        NotImplementedError: `really_complex_feature` is only available in PyArrow>='9000.0.0', found version '20.0.0'.
+        NotImplementedError: `really_complex_feature` is only available in 'pyarrow>=9000.0.0', found version '20.0.0'.
     """
 
     _min_version: tuple[int, ...]
@@ -1891,10 +1901,10 @@ class requires:  # noqa: N801
         if instance._backend_version >= self._min_version:
             return
         method = self._wrapped_name
-        backend = instance._implementation._alias
+        backend = instance._implementation
         minimum = self._unparse_version(self._min_version)
         found = self._unparse_version(instance._backend_version)
-        msg = f"`{method}` is only available in {backend}>={minimum!r}, found version {found!r}."
+        msg = f"`{method}` is only available in '{backend}>={minimum}', found version {found!r}."
         if self._hint:
             msg = f"{msg}\n{self._hint}"
         raise NotImplementedError(msg)
@@ -1946,3 +1956,18 @@ def inherit_doc(
             raise TypeError(msg)
 
     return decorate
+
+
+class _DeferredIterable(Generic[_T]):
+    """Store a callable producing an iterable to defer collection until we need it."""
+
+    def __init__(self, into_iter: Callable[[], Iterable[_T]], /) -> None:
+        self._into_iter: Callable[[], Iterable[_T]] = into_iter
+
+    def __iter__(self) -> Iterator[_T]:
+        yield from self._into_iter()
+
+    def to_tuple(self) -> tuple[_T, ...]:
+        # Collect and return as a `tuple`.
+        it = self._into_iter()
+        return it if isinstance(it, tuple) else tuple(it)

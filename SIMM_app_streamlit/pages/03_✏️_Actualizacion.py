@@ -16,6 +16,11 @@ from sqlalchemy import inspect, text
 from src.database.postgres import get_engine
 from src.utils.limpieza_archivo import preparar_datos
 from src.utils.limpieza_sms import preparar_datos_sms
+from src.utils.limpieza_pagos import procesar_archivo_pago
+from src.utils.limpieza_pagos import procesar_carpeta_pagos
+import tempfile
+import os
+
 
 # ==============================================================================
 # ESTILOS PERSONALIZADOS (agregar después de set_page_config)
@@ -104,6 +109,13 @@ class DataProcessor:
         """Ejecuta solo el procesamiento y validación (sin carga)"""
         with st.status("🔄 Procesando archivo ...", expanded=True) as status:
             try:
+                # Paso 0: Manejar lista de archivos
+                if isinstance(archivo, list):
+                    # Llama directamente a _procesar_archivo (no a _procesar_multiple)
+                    self.df_procesado, self.df_errores, mensaje = self._procesar_archivo(archivo)
+                else:
+                    # Procesamiento individual
+                    self.df_procesado, self.df_errores, mensaje = self._procesar_archivo(archivo)
                 # Paso 1: Procesamiento inicial
                 self.df_procesado, self.df_errores, mensaje = self._procesar_archivo(archivo)
                 
@@ -127,6 +139,10 @@ class DataProcessor:
                 st.error(f"Error crítico: {str(e)}")
                 return False
     
+    def _procesar_multiple(self, archivos):
+        """Maneja múltiples archivos (para sobreescribir en clases hijas)"""
+        raise NotImplementedError("Procesamiento múltiple no implementado")
+
     def _mostrar_resultados(self):
         """Muestra los resultados del procesamiento"""
         cols = st.columns(3)
@@ -304,6 +320,80 @@ class SMSProcessor(DataProcessor):
         """Implementación específica de limpieza para SMS"""
         return preparar_datos_sms(archivo, archivo.name)
 
+class PagosProcessor(DataProcessor):
+    """Procesador específico para pagos que trabaja con rutas de carpeta"""
+    
+    def __init__(self, engine):
+        config = {
+            'table_name': 'pagos',
+            'mapeo_columnas': {
+                'documento': 'documento',
+                'nombre_usuario': 'nombre_usuario',
+                'valor': 'valor',
+                'fecha_pago': 'fecha_pago',
+                'nro_acuerdo': 'nro_acuerdo',
+                'nro_comparendo': 'nro_comparendo',
+                'archivo_origen': 'archivo_origen',
+                'identificador_infraccion': 'identificador_infraccion',
+                'fecha_carga': 'fecha_carga',
+                'id_registro': 'id_registro'
+            },
+            'id_column': 'id_registro',
+            'clean_function': self._procesar_archivo
+        }
+        super().__init__(engine, config)
+        self.archivos_procesados = []
+        self.archivos_error = []
+    
+    def _procesar_archivo(self, archivos_subidos):
+        """Implementación específica para procesar múltiples archivos"""
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                # 1. Validar archivos antes de procesar
+                if not archivos_subidos:
+                    raise ValueError("No se subieron archivos TXT")
+                
+                # 2. Guardar archivos en temporal con logging
+                st.write("📂 Archivos recibidos:", [f.name for f in archivos_subidos])
+                self._guardar_archivos_temp(archivos_subidos, tmp_dir)
+                
+                # 3. Verificar que los archivos existen en la carpeta
+                archivos_en_tmp = os.listdir(tmp_dir)
+                if not archivos_en_tmp:
+                    raise ValueError("No se guardaron archivos en la carpeta temporal")
+                st.write("📦 Archivos en carpeta temporal:", archivos_en_tmp)
+                
+                # 4. Procesar carpeta y validar datos
+                df_consolidado, df_errores, self.archivos_error = procesar_carpeta_pagos(tmp_dir)
+                
+                if df_consolidado.empty:
+                    raise ValueError("Los archivos TXT están vacíos o tienen formato incorrecto")
+                
+                # 5. Transformaciones finales
+                df_procesado = df_consolidado.rename(columns=self.config['mapeo_columnas'])
+                df_procesado['fecha_carga'] = pd.to_datetime('now')
+                
+                return df_procesado, df_errores, "OK"
+            
+        except Exception as e:
+            st.error(f"🚨 Error crítico en Pagos: {str(e)}")
+            error_df = pd.DataFrame({'error': [str(e)]})
+            return pd.DataFrame(), error_df, str(e)
+    
+    def _guardar_archivos_temp(self, archivos_subidos, tmp_dir):
+        """Guarda archivos subidos en la carpeta temporal con nombres normalizados"""
+        self.archivos_procesados = []
+        for archivo in archivos_subidos:
+            # Normalizar nombre del archivo
+            nombre_base = os.path.splitext(archivo.name)[0]
+            nombre_normalizado = f"{nombre_base}.txt".lower().replace(" ", "_")
+            ruta = os.path.join(tmp_dir, nombre_normalizado)
+            
+            # Guardar archivo
+            with open(ruta, "wb") as f:
+                f.write(archivo.getbuffer())
+            
+            self.archivos_procesados.append(nombre_normalizado)
 # ==============================================================================
 # FUNCIONES UTILITARIAS
 # ==============================================================================
@@ -358,14 +448,21 @@ class StreamlitUI:
         
     def _mostrar_sidebar(self):
         """Muestra la barra lateral de navegación con estilos mejorados"""
+        MODULOS = {
+            "Carga de Gestiones": "🧮",
+            "Carga de SMS": "📲",
+            "Pagos": "💰" 
+        }
+        
         with st.sidebar:
-            # Título con estilo personalizado
             st.markdown('<div class="sidebar-title">Módulos Disponibles</div>', unsafe_allow_html=True)
             
+            # Usamos una lista de keys para el radio y mostramos el icono + nombre
             self.modulo = st.radio(
                 "Seleccione el módulo:",
-                options=["Carga de Gestiones", "Carga de SMS"],
-                index=0
+                options=list(MODULOS.keys()),
+                index=0,
+                format_func=lambda x: f"{MODULOS[x]} {x}"
             )
             
             st.markdown("---")
@@ -375,51 +472,84 @@ class StreamlitUI:
             st.markdown("""
                 <div class="sidebar-instructions">
                 1. Seleccione el módulo correspondiente<br>
-                2. Cargue el archivo Excel<br>
+                2. Cargue el archivo <br>
                 3. Siga el proceso de validación
                 </div>
             """, unsafe_allow_html=True)
         
     
     def _mostrar_carga_archivo(self):
-        """Muestra el componente de carga de archivo"""
+        """Componente de carga de archivo mejorado para todos los módulos"""
         with st.container():
-            if self.modulo:  # Verificar que no sea None
-                icono = '🧮' if 'gestiones' in self.modulo.lower() else '📲'
+            if self.modulo:
+                MODULO_ICONOS = {
+                    "Carga de Gestiones": "🧮",
+                    "Carga de SMS": "📲",
+                    "Pagos": "💰"
+                }
+                icono = MODULO_ICONOS.get(self.modulo, "📁")
                 st.title(f"{icono} {self.modulo}")
-                return st.file_uploader(
-                    f"Cargar archivo para {self.modulo}",
-                    type=["xlsx"],
-                    key=f"upload_{self.modulo}"
-                )
+                
+                # Configuración para Pagos
+                if self.modulo == "Pagos":
+                    return st.file_uploader(
+                        "Subir archivos TXT (múltiples permitidos)",
+                        type=["txt"],  # ✅ Versión corregida
+                        key="pagos_uploader_unique",
+                        accept_multiple_files=True,
+                        help="Formatos aceptados: .txt (en minúsculas o mayúsculas)"
+                    )
+                
+                # Configuración para Gestiones y SMS
+                else:
+                    tipo = "xlsx"
+                    return st.file_uploader(
+                        f"Subir archivo Excel ({tipo.upper()})",
+                        type=[tipo],
+                        key=f"upload_{self.modulo}_unique",
+                        help=f"Archivo Excel con extensión .{tipo}"
+                    )
+                
             return None
-    
+
     def ejecutar(self):
         """Ejecuta la aplicación principal con el nuevo flujo"""
         self._mostrar_sidebar()
-        archivo = self._mostrar_carga_archivo()
+        archivos = self._mostrar_carga_archivo()  # Cambiamos a plural
         
-        if archivo:
-            # Reiniciar estado al cargar nuevo archivo
+        if archivos:
+            # Reiniciar estado al cargar nuevos archivos
             if 'procesado' not in st.session_state:
                 st.session_state.procesado = False
                 st.session_state.processor = None
             
-            # Columna para controles de proceso
             col1, col2 = st.columns([2, 3])
             
             with col1:
                 st.subheader("⚙ Procesar Archivo")
                 if st.button("✅ Confirmar Procesar Archivo", type="primary"):
-                    if "gestiones" in self.modulo.lower():
-                        processor = GestionesProcessor(self.engine)
-                    else:
-                        processor = SMSProcessor(self.engine)
+                    processor_class = {
+                        "Carga de Gestiones": GestionesProcessor,
+                        "Carga de SMS": SMSProcessor,
+                        "Pagos": PagosProcessor
+                    }.get(self.modulo)
                     
-                    if processor.procesar_archivo(archivo):
-                        st.session_state.procesado = True
-                        st.session_state.processor = processor
-                        st.rerun()
+                    if processor_class:
+                        processor = processor_class(self.engine)
+                        
+                        # Lógica especial para Pagos
+                        if self.modulo == "Pagos":
+                            # Pasar TODOS los archivos (no hay [0])
+                            if processor.procesar_archivo(archivos):
+                                st.session_state.procesado = True
+                                st.rerun()
+                        else:
+                            # Procesar solo el primer archivo (para otros módulos)
+                            if processor.procesar_archivo(archivos[0]):
+                                st.session_state.procesado = True
+                                st.rerun()
+                    else:
+                        st.error("Módulo no implementado")
             
             if st.session_state.procesado:
                 processor = st.session_state.processor

@@ -50,6 +50,8 @@ if TYPE_CHECKING:
     from typing_extensions import TypeAlias
     from typing_extensions import TypeIs
 
+    from narwhals._compliant.typing import CompliantDataFrameAny
+    from narwhals._compliant.typing import CompliantLazyFrameAny
     from narwhals._pandas_like.expr import PandasLikeExpr
     from narwhals._pandas_like.group_by import PandasLikeGroupBy
     from narwhals._pandas_like.namespace import PandasLikeNamespace
@@ -57,8 +59,6 @@ if TYPE_CHECKING:
     from narwhals.dtypes import DType
     from narwhals.schema import Schema
     from narwhals.typing import AsofJoinStrategy
-    from narwhals.typing import CompliantDataFrame
-    from narwhals.typing import CompliantLazyFrame
     from narwhals.typing import DTypeBackend
     from narwhals.typing import JoinStrategy
     from narwhals.typing import PivotAgg
@@ -518,10 +518,8 @@ class PandasLikeDataFrame(
 
     # --- convert ---
     def collect(
-        self,
-        backend: Implementation | None,
-        **kwargs: Any,
-    ) -> CompliantDataFrame[Any, Any, Any]:
+        self, backend: Implementation | None, **kwargs: Any
+    ) -> CompliantDataFrameAny:
         if backend is None:
             return PandasLikeDataFrame(
                 self.native,
@@ -576,7 +574,7 @@ class PandasLikeDataFrame(
 
         return PandasLikeGroupBy(self, keys, drop_null_keys=drop_null_keys)
 
-    def join(
+    def join(  # noqa: C901, PLR0911, PLR0912
         self,
         other: Self,
         *,
@@ -773,9 +771,7 @@ class PandasLikeDataFrame(
         )
 
     # --- lazy-only ---
-    def lazy(
-        self, *, backend: Implementation | None = None
-    ) -> CompliantLazyFrame[Any, Any]:
+    def lazy(self, *, backend: Implementation | None = None) -> CompliantLazyFrameAny:
         from narwhals.utils import parse_version
 
         pandas_df = self.to_pandas()
@@ -932,7 +928,7 @@ class PandasLikeDataFrame(
     def gather_every(self, n: int, offset: int) -> Self:
         return self._with_native(self.native.iloc[offset::n], validate_column_names=False)
 
-    def pivot(
+    def pivot(  # noqa: C901, PLR0912
         self,
         on: Sequence[str],
         *,
@@ -945,7 +941,7 @@ class PandasLikeDataFrame(
         if self._implementation is Implementation.PANDAS and (
             self._backend_version < (1, 1)
         ):  # pragma: no cover
-            msg = "pivot is only supported for pandas>=1.1"
+            msg = "pivot is only supported for 'pandas>=1.1'"
             raise NotImplementedError(msg)
         if self._implementation is Implementation.MODIN:
             msg = "pivot is not supported for Modin backend due to https://github.com/modin-project/modin/issues/7409."
