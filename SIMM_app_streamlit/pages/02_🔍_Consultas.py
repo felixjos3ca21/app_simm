@@ -99,60 +99,111 @@ total_registros = get_total_records()
 # NUEVA SECCIÓN DE CRUCE EN SIDEBAR
 # ==============================================
 
-# Funciones primero
 def ejecutar_cruce(df_input):
-    """Ejecuta el cruce con la base de datos"""
+    """Ejecuta cruces separados y devuelve resultados + métricas"""
     conn = get_connection()
     
     try:
-        # Convertir a string y obtener códigos únicos
+        # 1. Inicialización ---------------------------------------------------
+        resultados = {
+            'por_codcliente': pd.DataFrame(),
+            'por_nitcliente': pd.DataFrame(),
+            'metricas': {}
+        }
+        
+        total_registros = len(df_input)
+        resultados['metricas']['total_procesados'] = total_registros
+        
+        # 2. Cruce por codcliente ---------------------------------------------
         codigos = df_input['codcliente'].astype(str).unique().tolist()
         
-        if not codigos:
-            st.warning("⚠️ No hay códigos para buscar")
-            return None
-
-        query = """
-            SELECT 
-                identificador_infraccion AS codcliente,
-                fecha_gestion,
-                id_gestion,
-                resultado,
-                archivo_origen
-            FROM gestiones
-            WHERE identificador_infraccion = ANY(%s)
-        """
+        if codigos:
+            query_cod = """
+                SELECT DISTINCT ON (identificador_infraccion)
+                    identificador_infraccion AS codcliente,
+                    fecha_gestion AS fecha_gestion_cod,
+                    id_gestion AS id_gestion_cod,
+                    resultado AS resultado_cod,
+                    archivo_origen AS archivo_cod
+                FROM gestiones
+                WHERE identificador_infraccion = ANY(%s)
+                ORDER BY identificador_infraccion, fecha_gestion DESC
+            """
+            df_cod = pd.read_sql(query_cod, conn, params=(codigos,))
+            
+            resultados['por_codcliente'] = pd.merge(
+                left=df_input,
+                right=df_cod,
+                on='codcliente',
+                how='left'
+            )
+            coincidencias_cod = resultados['por_codcliente']['id_gestion_cod'].notna().sum()
+            resultados['metricas']['coincidencias_cod'] = coincidencias_cod
+            
+        # 3. Cruce por nitcliente ---------------------------------------------
+        nits = df_input['nitcliente'].astype(str).unique().tolist()
         
-        df_db = pd.read_sql(query, conn, params=(codigos,))
-        
-        # Hacer merge evitando duplicados
-        if not df_db.empty:
-            df_db = df_db.drop_duplicates(subset=['codcliente'])
-        
-        df_resultado = pd.merge(
-            left=df_input,
-            right=df_db,
-            how='left',
-            on='codcliente',
-            suffixes=('', '_bd')
+        if nits:
+            query_nit = """
+                SELECT DISTINCT ON (documento)
+                    documento AS nitcliente,
+                    fecha_gestion AS fecha_gestion_nit,
+                    id_gestion AS id_gestion_nit,
+                    resultado AS resultado_nit,
+                    archivo_origen AS archivo_nit
+                FROM gestiones
+                WHERE documento = ANY(%s)
+                ORDER BY documento, fecha_gestion DESC
+            """
+            df_nit = pd.read_sql(query_nit, conn, params=(nits,))
+            
+            resultados['por_nitcliente'] = pd.merge(
+                left=df_input,
+                right=df_nit,
+                on='nitcliente',
+                how='left'
+            )
+            coincidencias_nit = resultados['por_nitcliente']['id_gestion_nit'].notna().sum()
+            resultados['metricas']['coincidencias_nit'] = coincidencias_nit
+            
+        # 4. Cálculo de métricas finales --------------------------------------
+        resultados['metricas']['sin_coincidencia'] = total_registros - (
+            resultados['metricas'].get('coincidencias_cod', 0) +
+            resultados['metricas'].get('coincidencias_nit', 0)
         )
         
-        return df_resultado
-        
+        return resultados
+
     except Exception as e:
-        st.error(f"Error en cruce: {str(e)}")
+        st.error(f"🚨 Error crítico durante el cruce: {str(e)}")
         return None
     finally:
         conn.close()
 
-def descargar_excel(df):
+def generar_reporte_metricas(metricas):
+    """Crea DataFrame con estadísticas para Excel"""
+    return pd.DataFrame({
+        'Métrica': [
+            'Registros procesados',
+            'Coincidencias por codcliente',
+            'Coincidencias por nitcliente',
+            'Sin coincidencias'
+        ],
+        'Valor': [
+            metricas['total_procesados'],
+            metricas.get('coincidencias_cod', 0),
+            metricas.get('coincidencias_nit', 0),
+            metricas['sin_coincidencia']
+        ]
+    })
+
+def descargar_excel(dfs_dict):
     """Genera archivo Excel para descarga"""
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='ResultadoCruce')
-    
-    processed_data = output.getvalue()
-    return processed_data
+        for sheet_name, df in dfs_dict.items():
+            df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
+    return output.getvalue()
 
 st.sidebar.header("🔀 Cruce de Bases")
 uploaded_file = st.sidebar.file_uploader(
@@ -181,33 +232,56 @@ if uploaded_file:
                 st.dataframe(df_cruce.head(3))
                 
             # Botón para ejecutar cruce
-            if st.button("Ejecutar cruce"):
-               
-                # Dentro del if st.button("Ejecutar cruce"):
-                with st.spinner("Buscando coincidencias en la base de datos..."):
-                    df_resultado = ejecutar_cruce(df_cruce)
+            if st.button("🚀 Ejecutar cruce ahora"):
+                with st.spinner("🔍 Buscando coincidencias en 3.5M+ registros..."):
+                    resultados = ejecutar_cruce(df_cruce)
                     
-                    if df_resultado is not None:
-                        coincidencias = len(df_resultado.dropna(subset=['fecha_gestion']))
-                        total = len(df_resultado)
+                    if resultados:
+                        # Almacenar en sesión para descarga posterior
+                        st.session_state.resultados_cruce = resultados
                         
-                        st.success(f"""
-                        ✅ Cruce completado:
-                        - Registros con coincidencia: {coincidencias}
-                        - Registros sin coincidencia: {total - coincidencias}
-                        """)
+                        # Mostrar reporte visual
+                        st.subheader("📊 Reporte de Ejecución")
                         
-                        # Mostrar resultados
-                        st.dataframe(df_resultado.head(50))
+                        col1, col2, col3, col4 = st.columns(4)
+                        col1.metric("Total procesados", resultados['metricas']['total_procesados'])
+                        col2.metric("Coincidencias codcliente", resultados['metricas'].get('coincidencias_cod', 0))
+                        col3.metric("Coincidencias nitcliente", resultados['metricas'].get('coincidencias_nit', 0))
+                        col4.metric("Sin coincidencias", resultados['metricas']['sin_coincidencia'])
                         
-                        # Preparar descarga
-                        excel_file = descargar_excel(df_resultado)
-                        st.download_button(
-                            label="📥 Descargar resultado",
-                            data=excel_file,
-                            file_name="resultado_cruce.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
+                        # Vista previa avanzada
+                        with st.expander("🔎 Detalle de coincidencias por codcliente"):
+                            st.dataframe(resultados['por_codcliente'].head(10))
+                        
+                        with st.expander("🔎 Detalle de coincidencias por nitcliente"):
+                            st.dataframe(resultados['por_nitcliente'].head(10))
+
+        # Descarga separada ----------------------------------------------------------
+        if 'resultados_cruce' in st.session_state:
+            st.divider()
+            st.subheader("📤 Exportación de Resultados")
+            
+            if st.button("💾 Generar archivo Excel completo"):
+                with st.spinner("⏳ Construyendo archivo de 3 hojas..."):
+                    # Crear hoja de métricas
+                    df_metricas = generar_reporte_metricas(st.session_state.resultados_cruce['metricas'])
+                    
+                    # Construir diccionario para Excel
+                    excel_data = {
+                        'METRICAS': df_metricas,
+                        'POR_CODCLIENTE': st.session_state.resultados_cruce['por_codcliente'],
+                        'POR_NITCLIENTE': st.session_state.resultados_cruce['por_nitcliente']
+                    }
+                    
+                    # Generar y descargar
+                    excel_file = descargar_excel(excel_data)
+                    
+                    st.download_button(
+                        label="⬇️ Descargar Reporte Completo",
+                        data=excel_file,
+                        file_name=f"CRUCE_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
                 
     except Exception as e:
         st.sidebar.error(f"Error al leer archivo: {str(e)}")
