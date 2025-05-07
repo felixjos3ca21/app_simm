@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
 import streamlit as st
@@ -7,15 +8,33 @@ from src.database.postgres import get_connection
 
 sys.path.append(str(Path(__file__).parent))
 
-st.title("🕵️‍♂️ Consultas de Gestiones - Optimizado")
+# ==============================================
+# CONFIGURACIÓN GENERAL
+# ==============================================
+st.set_page_config(page_title="Consultas de Gestiones", page_icon="🕵️", layout="wide")
 
-# Widget de selección de vista
-consulta_mode = st.radio(
-    "Tipo de consulta:",
-    ("Resumen Estadístico", "Datos Crudos", "Análisis por Campaña")
-)
+# Estilos CSS personalizados
+st.markdown("""
+    <style>
+    .main-container {
+        padding: 2rem;
+    }
+    .metric-card {
+        padding: 1.5rem;
+        border-radius: 10px;
+        background: #ffffff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+    .stRadio [role=radiogroup]{
+        gap: 0.5rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# Conexión y total de registros
+# ==============================================
+# FUNCIONES DE DATOS
+# ==============================================
 @st.cache_data
 def get_total_records():
     conn = get_connection()
@@ -26,78 +45,6 @@ def get_total_records():
     return total
 
 total_registros = get_total_records()
-
-# # Lógica para cada vista
-# if consulta_mode == "Resumen Estadístico":
-#     conn = get_connection()
-    
-#     st.header("KPIs Principales")
-#     col1, col2, col3 = st.columns(3)
-#     col1.metric("Total Registros", total_registros)
-    
-#     avg_valor = pd.read_sql("SELECT AVG(valor) FROM gestiones", conn).iloc[0,0]
-#     col2.metric("Valor Promedio", f"${avg_valor:,.2f}")
-    
-#     unique_comparendos = pd.read_sql(
-#         "SELECT COUNT(DISTINCT identificador_infraccion) FROM gestiones", 
-#         conn
-#     ).iloc[0,0]
-#     col3.metric("Comparendos Únicos", unique_comparendos)
-    
-#     st.subheader("Distribución por Tipo de Llamada")
-#     df_tipos = pd.read_sql(
-#         "SELECT tipo_llamada, COUNT(*) as cantidad FROM gestiones GROUP BY tipo_llamada",
-#         conn
-#     )
-#     st.bar_chart(df_tipos.set_index('tipo_llamada'))
-    
-#     conn.close()
-
-# elif consulta_mode == "Datos Crudos":
-#     page_size = 100
-#     page_number = st.number_input("Página", min_value=1, value=1)
-    
-#     offset = (page_number - 1) * page_size
-#     query = f"""
-#         SELECT * 
-#         FROM gestiones
-#         ORDER BY fecha_gestion DESC
-#         LIMIT {page_size} OFFSET {offset}
-#     """
-    
-#     conn = get_connection()
-#     df_chunk = pd.read_sql(query, conn)
-#     conn.close()
-    
-#     st.dataframe(df_chunk)
-#     st.write(f"Mostrando registros {offset + 1} - {offset + len(df_chunk)} de {total_registros}")
-
-# elif consulta_mode == "Análisis por Campaña":
-#     conn = get_connection()
-    
-#     page_size_campanas = 50
-#     page_campana = st.number_input("Página de Campañas", min_value=1, value=1)
-    
-#     offset_campana = (page_campana - 1) * page_size_campanas
-#     campanas = pd.read_sql(
-#         f"SELECT DISTINCT campana FROM gestiones LIMIT {page_size_campanas} OFFSET {offset_campana}",
-#         conn
-#     )['campana'].tolist()
-    
-#     campana = st.selectbox("Selecciona Campaña:", campanas)
-    
-#     df_campana = pd.read_sql(
-#         "SELECT * FROM gestiones WHERE campana = %s LIMIT 1000",
-#         conn,
-#         params=(campana,)
-#     )
-    
-#     st.dataframe(df_campana)
-#     conn.close()
-
-    # ==============================================
-# NUEVA SECCIÓN DE CRUCE EN SIDEBAR
-# ==============================================
 
 def ejecutar_cruce(df_input):
     """Ejecuta cruces separados y devuelve resultados + métricas"""
@@ -205,83 +152,260 @@ def descargar_excel(dfs_dict):
             df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
     return output.getvalue()
 
-st.sidebar.header("🔀 Cruce de Bases")
-uploaded_file = st.sidebar.file_uploader(
-    "Subir archivo para cruce (Excel)",
-    type=["xlsx"],
-    help="El archivo debe contener las columnas: codcliente, Tipo de documento, nitcliente, numobligacion, fechapago, valorpago"
-)
+# ==============================================
+# COMPONENTES REUTILIZABLES
+# ==============================================
+def mostrar_metricas(col, titulo, valor, ayuda=None):
+    """Componente personalizado para métricas"""
+    with col:
+        st.markdown(
+            f"<div class='metric-box'>"
+            f"<h3 style='margin:0; font-size:1.1rem;'>{titulo}</h3>"
+            f"<p style='margin:0; font-size:1.8rem; font-weight:bold;'>{valor}</p>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+        if ayuda:
+            st.caption(ayuda)
 
-if uploaded_file:
-    # Validar y procesar archivo
-    try:
-        df_cruce = pd.read_excel(uploaded_file)
+def crear_seccion(titulo, nivel=3):
+    """Componente para secciones estilizadas"""
+    st.markdown(
+        f"<div class='header-accent'><h{nivel}>{titulo}</h{nivel}></div>", 
+        unsafe_allow_html=True
+    )
+
+# ==============================================
+# VISTAS PRINCIPALES
+# ==============================================
+def mostrar_vista_resumen():
+    st.header("📊 Resumen Base de Datos Gestiones")
+    total_registros = get_total_records()
+    
+    # Sección de KPIs
+    cols = st.columns(3)
+    with cols[0]:
+        st.markdown(f'<div class="metric-card">📈 Total Registros<br><h2>{total_registros:,}</h2></div>', unsafe_allow_html=True)
+    
+    with get_connection() as conn:
+        avg_valor = pd.read_sql("SELECT AVG(valor) FROM gestiones", conn).iloc[0,0]
+        with cols[1]:
+            st.markdown(f'<div class="metric-card">💰 Valor Promedio<br><h2>${avg_valor:,.2f}</h2></div>', unsafe_allow_html=True)
         
-        # Validación de columnas
-        required_columns = ['codcliente', 'Tipo de documento', 'nitcliente', 
-                          'numobligacion', 'fechapago', 'valorpago']
-        df_cruce['codcliente'] = df_cruce['codcliente'].astype(str)
-        if not all(col in df_cruce.columns for col in required_columns):
-            missing = [col for col in required_columns if col not in df_cruce.columns]
-            st.sidebar.error(f"❌ Faltan columnas requeridas: {', '.join(missing)}")
-        else:
-            st.sidebar.success("✔️ Archivo validado correctamente")
-            
-            # Mostrar previsualización
-            with st.expander("Vista previa archivo subido"):
-                st.dataframe(df_cruce.head(3))
-                
-            # Botón para ejecutar cruce
-            if st.button("🚀 Ejecutar cruce ahora"):
-                with st.spinner("🔍 Buscando coincidencias en 3.5M+ registros..."):
-                    resultados = ejecutar_cruce(df_cruce)
-                    
-                    if resultados:
-                        # Almacenar en sesión para descarga posterior
-                        st.session_state.resultados_cruce = resultados
-                        
-                        # Mostrar reporte visual
-                        st.subheader("📊 Reporte de Ejecución")
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Total procesados", resultados['metricas']['total_procesados'])
-                        col2.metric("Coincidencias codcliente", resultados['metricas'].get('coincidencias_cod', 0))
-                        col3.metric("Coincidencias nitcliente", resultados['metricas'].get('coincidencias_nit', 0))
-                        col4.metric("Sin coincidencias", resultados['metricas']['sin_coincidencia'])
-                        
-                        # Vista previa avanzada
-                        with st.expander("🔎 Detalle de coincidencias por codcliente"):
-                            st.dataframe(resultados['por_codcliente'].head(10))
-                        
-                        with st.expander("🔎 Detalle de coincidencias por nitcliente"):
-                            st.dataframe(resultados['por_nitcliente'].head(10))
+        unique_comparendos = pd.read_sql(
+            "SELECT COUNT(DISTINCT identificador_infraccion) FROM gestiones", 
+            conn
+        ).iloc[0,0]
+        with cols[2]:
+            st.markdown(f'<div class="metric-card">🆔 Comparendos Únicos<br><h2>{unique_comparendos:,}</h2></div>', unsafe_allow_html=True)
+    
+    # Gráficos
+    with st.expander("📊 Distribución por Tipo de Llamada", expanded=True):
+        with get_connection() as conn:
+            df_tipos = pd.read_sql(
+                "SELECT tipo_llamada, COUNT(*) as cantidad FROM gestiones GROUP BY tipo_llamada",
+                conn
+            )
+            st.bar_chart(df_tipos.set_index('tipo_llamada'))
 
-        # Descarga separada ----------------------------------------------------------
-        if 'resultados_cruce' in st.session_state:
-            st.divider()
-            st.subheader("📤 Exportación de Resultados")
-            
-            if st.button("💾 Generar archivo Excel completo"):
-                with st.spinner("⏳ Construyendo archivo de 3 hojas..."):
-                    # Crear hoja de métricas
-                    df_metricas = generar_reporte_metricas(st.session_state.resultados_cruce['metricas'])
-                    
-                    # Construir diccionario para Excel
-                    excel_data = {
-                        'METRICAS': df_metricas,
-                        'POR_CODCLIENTE': st.session_state.resultados_cruce['por_codcliente'],
-                        'POR_NITCLIENTE': st.session_state.resultados_cruce['por_nitcliente']
-                    }
-                    
-                    # Generar y descargar
-                    excel_file = descargar_excel(excel_data)
-                    
-                    st.download_button(
-                        label="⬇️ Descargar Reporte Completo",
-                        data=excel_file,
-                        file_name=f"CRUCE_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+def mostrar_vista_datos_crudos():
+    st.header("📋 Datos Crudos de la tabla gestiones")
+    total_registros = get_total_records()
+    
+    page_size = 100
+    page_number = st.number_input(
+        "Número de Página", 
+        min_value=1, 
+        value=1,
+        help="Cada página muestra 100 registros",
+        key="pagination_raw"
+    )
+    
+    offset = (page_number - 1) * page_size
+    with get_connection() as conn:
+        df_chunk = pd.read_sql(
+            f"SELECT * FROM gestiones ORDER BY fecha_gestion DESC LIMIT {page_size} OFFSET {offset}",
+            conn
+        )
+    
+    st.dataframe(
+        df_chunk,
+        use_container_width=True,
+        height=600,
+        column_config={
+            "fecha_gestion": st.column_config.DatetimeColumn(
+                "Fecha Gestión",
+                format="DD/MM/YYYY HH:mm"
+            )
+        }
+    )
+    st.caption(f"Mostrando registros {offset + 1} - {offset + len(df_chunk)} de {total_registros:,}")
+
+def mostrar_vista_campanas():
+    st.header("📌 Análisis por Archivo")
+    
+    with get_connection() as conn:
+        page_size = 50
+        page_number = st.number_input(
+            "Página de Archivos",
+            min_value=1,
+            value=1,
+            help="Navega entre grupos de 50 archivos",
+            key="pagination_archivos"
+        )
+        
+        offset = (page_number - 1) * page_size
+        archivos = pd.read_sql(
+            f"SELECT DISTINCT archivo_origen FROM gestiones ORDER BY archivo_origen DESC LIMIT {page_size} OFFSET {offset}",
+            conn
+        )['archivo_origen'].tolist()
+        
+        archivo_seleccionado = st.selectbox(
+            "Selecciona archivo:",
+            archivos,
+            index=0,
+            help="Selecciona un archivo origen para analizar"
+        )
+        
+        df_archivo = pd.read_sql(
+            "SELECT * FROM gestiones WHERE archivo_origen = %s ORDER BY fecha_gestion DESC LIMIT 1000",
+            conn,
+            params=(archivo_seleccionado,))
+        
+        st.subheader(f"🔍 Registros del archivo: {archivo_seleccionado}")
+        st.dataframe(
+            df_archivo,
+            use_container_width=True,
+            height=600,
+            column_config={
+                "fecha_gestion": st.column_config.DatetimeColumn(
+                    "Fecha Gestión",
+                    format="DD/MM/YYYY HH:mm"
+                )
+            }
+        )
+        
+        # Estadísticas rápidas
+        with st.expander("📊 Estadísticas del archivo", expanded=True):
+            cols = st.columns(3)
+            with cols[0]:
+                st.metric("Total registros", len(df_archivo))
+            with cols[1]:
+                st.metric("Última gestión", df_archivo['fecha_gestion'].max().strftime("%d/%m/%Y"))
+            with cols[2]:
+                st.metric("Valor promedio", f"${df_archivo['valor'].mean():,.2f}")
+
+        st.caption(f"Mostrando {len(df_archivo)} registros recientes del archivo {archivo_seleccionado}")
+
+def mostrar_vista_cruce():
+    st.header("🔀 Cruce de Bases de Datos")
+    
+    col1, col2 = st.columns([1, 2], gap="large")
+    
+    with col1:
+        uploaded_file = st.file_uploader(
+            "Subir archivo Excel",
+            type=["xlsx"],
+            help="El archivo debe contener las columnas requeridas",
+            key="file_uploader_main"
+        )
+        
+        if uploaded_file:
+            try:
+                df_cruce = pd.read_excel(uploaded_file)
+                required_columns = ['codcliente', 'Tipo de documento', 'nitcliente', 
+                                  'numobligacion', 'fechapago', 'valorpago']
                 
-    except Exception as e:
-        st.sidebar.error(f"Error al leer archivo: {str(e)}")
+                if not all(col in df_cruce.columns for col in required_columns):
+                    missing = [col for col in required_columns if col not in df_cruce.columns]
+                    st.error(f"❌ Columnas faltantes: {', '.join(missing)}")
+                else:
+                    st.success("✔️ Archivo válido")
+                    with st.expander("Vista previa del archivo"):
+                        st.dataframe(df_cruce.head(3))
+                    
+                    if st.button("🚀 Ejecutar Cruce", use_container_width=True):
+                        with st.spinner("Analizando 3.5M+ registros..."):
+                            resultados = ejecutar_cruce(df_cruce)
+                            st.session_state.resultados_cruce = resultados
+                            st.rerun()
+            
+            except Exception as e:
+                st.error(f"Error en el archivo: {str(e)}")
+
+    with col2:
+        if "resultados_cruce" in st.session_state:
+            resultados = st.session_state.resultados_cruce
+            
+            st.subheader("📌 Resultados del Cruce")
+            cols_metrics = st.columns(4)
+            with cols_metrics[0]:
+                st.metric("Total Procesados", f"{resultados['metricas']['total_procesados']:,}")
+            with cols_metrics[1]:
+                st.metric("Coincidencias Código", f"{resultados['metricas'].get('coincidencias_cod', 0):,}")
+            with cols_metrics[2]:
+                st.metric("Coincidencias NIT", f"{resultados['metricas'].get('coincidencias_nit', 0):,}")
+            with cols_metrics[3]:
+                st.metric("Sin Coincidencias", f"{resultados['metricas']['sin_coincidencia']:,}")
+            
+            tab1, tab2 = st.tabs(["Por Código", "Por NIT"])
+            with tab1:
+                st.dataframe(resultados['por_codcliente'].head(100)) 
+            with tab2:
+                st.dataframe(resultados['por_nitcliente'].head(100))
+            
+            st.download_button(
+                label="📥 Descargar Reporte Completo",
+                data=descargar_excel({
+                    'METRICAS': generar_reporte_metricas(resultados['metricas']),
+                    'POR_CODCLIENTE': resultados['por_codcliente'],
+                    'POR_NITCLIENTE': resultados['por_nitcliente']
+                }),
+                file_name=f"reporte_cruce_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+# ==============================================
+# BARRA LATERAL - NAVEGACIÓN
+# ==============================================
+def sidebar_navegacion():
+    with st.sidebar:
+        st.header("Tipos de consultas a la Base de Datos Gestiones")
+        st.caption("Selecciona el módulo que deseas consultar")
+        opcion = st.radio(
+            "Seleccionar módulo:",
+            options=[
+                "Resumen Base de Datos Gestiones",
+                "Datos Crudos de la tabla gestiones", 
+                "Análisis por Archivo",
+                "Cruce de Datos"
+            ],
+            label_visibility="collapsed"
+        )
+        
+        st.divider()
+        st.markdown("**Configuración:**")
+        st.caption("Base de datos: PostgreSQL")
+        st.caption(f"Última actualización: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
+
+    return opcion
+
+# ==============================================
+# ESTRUCTURA PRINCIPAL
+# ==============================================
+def main():
+    opcion_seleccionada = sidebar_navegacion()
+    
+    with st.container():
+        if opcion_seleccionada == "Resumen Base de Datos Gestiones":
+            mostrar_vista_resumen()
+        elif opcion_seleccionada == "Datos Crudos de la tabla gestiones":
+            mostrar_vista_datos_crudos()
+        elif opcion_seleccionada == "Análisis por Archivo":
+            mostrar_vista_campanas()
+        elif opcion_seleccionada == "Cruce de Datos":
+            mostrar_vista_cruce()
+
+if __name__ == "__main__":
+    main()
