@@ -47,82 +47,100 @@ def get_total_records():
 total_registros = get_total_records()
 
 def ejecutar_cruce(df_input):
-    """Ejecuta cruces separados y devuelve resultados + métricas"""
+    """Cruza los pagos con gestiones anteriores manteniendo estructura original"""
     conn = get_connection()
     
     try:
-        # 1. Inicialización ---------------------------------------------------
-        resultados = {
-            'por_codcliente': pd.DataFrame(),
-            'por_nitcliente': pd.DataFrame(),
-            'metricas': {}
-        }
+        # 1. Preparar datos manteniendo estructura original
+        df = df_input.copy()
         
-        total_registros = len(df_input)
-        resultados['metricas']['total_procesados'] = total_registros
+        # Convertir fecha y validar
+        df['fechapago'] = pd.to_datetime(df['fechapago'], dayfirst=True, errors='coerce')
+
+        # Verificar fechas inválidas ANTES de convertir a date
+        if df['fechapago'].isna().any():
+            st.error("❌ Fechas de pago inválidas. Usar formato DD/MM/YYYY")
+            return None
+
+        # Ahora convertir a date (solo si pasó la validación)
+        df['fechapago'] = df['fechapago'].dt.date
+
+        # 2. Cruce por código cliente
+        query_cod = """
+            SELECT DISTINCT ON (identificador_infraccion)
+                identificador_infraccion AS codcliente,
+                fecha_gestion_sencilla AS fecha_gestion_cod,
+                id_gestion AS id_gestion_cod,
+                resultado AS resultado_cod,
+                archivo_origen AS archivo_cod
+            FROM gestiones
+            WHERE identificador_infraccion = %s
+            AND fecha_gestion_sencilla <= %s
+            ORDER BY identificador_infraccion, fecha_gestion_sencilla DESC
+        """
         
-        # 2. Cruce por codcliente ---------------------------------------------
-        codigos = df_input['codcliente'].astype(str).unique().tolist()
+        # 3. Cruce por NIT
+        query_nit = """
+            SELECT DISTINCT ON (documento)
+                documento AS nitcliente,
+                fecha_gestion_sencilla AS fecha_gestion_nit,
+                id_gestion AS id_gestion_nit,
+                resultado AS resultado_nit,
+                archivo_origen AS archivo_nit
+            FROM gestiones
+            WHERE documento = %s
+            AND fecha_gestion_sencilla<= %s
+            ORDER BY documento, fecha_gestion_sencilla DESC
+        """
+
+        # 4. Realizar cruces manteniendo índice original
+        resultados = []
+        with conn.cursor() as cursor:
+            for idx, row in df.iterrows():
+                # Cruce por código cliente
+                cursor.execute(query_cod, (str(row['codcliente']), row['fechapago']))
+                gestion_cod = cursor.fetchone()
+                
+                # Si no hay coincidencia, buscar por NIT
+                if not gestion_cod:
+                    cursor.execute(query_nit, (str(row['nitcliente']), row['fechapago']))
+                    gestion_nit = cursor.fetchone()
+                else:
+                    gestion_nit = None
+                
+                # Construir registro resultante
+                registro = row.to_dict()
+                if gestion_cod:
+                    registro.update({
+                        'fecha_gestion_cod': gestion_cod[1],
+                        'id_gestion_cod': gestion_cod[2],
+                        'resultado_cod': gestion_cod[3],
+                        'archivo_cod': gestion_cod[4]
+                    })
+                if gestion_nit:
+                    registro.update({
+                        'fecha_gestion_nit': gestion_nit[1],
+                        'id_gestion_nit': gestion_nit[2],
+                        'resultado_nit': gestion_nit[3],
+                        'archivo_nit': gestion_nit[4]
+                    })
+                
+                resultados.append(registro)
+
+        # 5. Crear DataFrame final
+        df_final = pd.DataFrame(resultados)
         
-        if codigos:
-            query_cod = """
-                SELECT DISTINCT ON (identificador_infraccion)
-                    identificador_infraccion AS codcliente,
-                    fecha_gestion AS fecha_gestion_cod,
-                    id_gestion AS id_gestion_cod,
-                    resultado AS resultado_cod,
-                    archivo_origen AS archivo_cod
-                FROM gestiones
-                WHERE identificador_infraccion = ANY(%s)
-                ORDER BY identificador_infraccion, fecha_gestion DESC
-            """
-            df_cod = pd.read_sql(query_cod, conn, params=(codigos,))
-            
-            resultados['por_codcliente'] = pd.merge(
-                left=df_input,
-                right=df_cod,
-                on='codcliente',
-                how='left'
-            )
-            coincidencias_cod = resultados['por_codcliente']['id_gestion_cod'].notna().sum()
-            resultados['metricas']['coincidencias_cod'] = coincidencias_cod
-            
-        # 3. Cruce por nitcliente ---------------------------------------------
-        nits = df_input['nitcliente'].astype(str).unique().tolist()
+        # Ordenar columnas: originales + nuevas
+        original_cols = df.columns.tolist()
+        nuevas_cols = [
+            'fecha_gestion_cod', 'id_gestion_cod', 'resultado_cod', 'archivo_cod',
+            'fecha_gestion_nit', 'id_gestion_nit', 'resultado_nit', 'archivo_nit'
+        ]
         
-        if nits:
-            query_nit = """
-                SELECT DISTINCT ON (documento)
-                    documento AS nitcliente,
-                    fecha_gestion AS fecha_gestion_nit,
-                    id_gestion AS id_gestion_nit,
-                    resultado AS resultado_nit,
-                    archivo_origen AS archivo_nit
-                FROM gestiones
-                WHERE documento = ANY(%s)
-                ORDER BY documento, fecha_gestion DESC
-            """
-            df_nit = pd.read_sql(query_nit, conn, params=(nits,))
-            
-            resultados['por_nitcliente'] = pd.merge(
-                left=df_input,
-                right=df_nit,
-                on='nitcliente',
-                how='left'
-            )
-            coincidencias_nit = resultados['por_nitcliente']['id_gestion_nit'].notna().sum()
-            resultados['metricas']['coincidencias_nit'] = coincidencias_nit
-            
-        # 4. Cálculo de métricas finales --------------------------------------
-        resultados['metricas']['sin_coincidencia'] = total_registros - (
-            resultados['metricas'].get('coincidencias_cod', 0) +
-            resultados['metricas'].get('coincidencias_nit', 0)
-        )
-        
-        return resultados
+        return df_final[original_cols + nuevas_cols]
 
     except Exception as e:
-        st.error(f"🚨 Error crítico durante el cruce: {str(e)}")
+        st.error(f"Error en el cruce: {str(e)}")
         return None
     finally:
         conn.close()
@@ -298,72 +316,63 @@ def mostrar_vista_campanas():
         st.caption(f"Mostrando {len(df_archivo)} registros recientes del archivo {archivo_seleccionado}")
 
 def mostrar_vista_cruce():
-    st.header("🔀 Cruce de Bases de Datos")
+    st.header("🔀 Cruce de Datos Simplificado")
     
-    col1, col2 = st.columns([1, 2], gap="large")
+    col1, col2 = st.columns([1, 2])
     
     with col1:
-        uploaded_file = st.file_uploader(
-            "Subir archivo Excel",
-            type=["xlsx"],
-            help="El archivo debe contener las columnas requeridas",
-            key="file_uploader_main"
-        )
+        uploaded_file = st.file_uploader("Subir Excel con pagos", type=["xlsx"])
         
         if uploaded_file:
             try:
-                df_cruce = pd.read_excel(uploaded_file)
-                required_columns = ['codcliente', 'Tipo de documento', 'nitcliente', 
-                                  'numobligacion', 'fechapago', 'valorpago']
+                # Leer archivo SIN dayfirst
+                df = pd.read_excel(uploaded_file)
                 
-                if not all(col in df_cruce.columns for col in required_columns):
-                    missing = [col for col in required_columns if col not in df_cruce.columns]
-                    st.error(f"❌ Columnas faltantes: {', '.join(missing)}")
+                # Convertir fecha después de leer
+                df['fechapago'] = pd.to_datetime(
+                    df['fechapago'], 
+                    dayfirst=True,  # Aquí sí es válido
+                    errors='coerce'
+                )
+                
+                required_cols = ['codcliente', 'nitcliente', 'fechapago']
+                
+                if all(col in df.columns for col in required_cols):
+                    if st.button("Ejecutar cruce temporal"):
+                        with st.spinner("Buscando gestiones anteriores..."):
+                            resultado = ejecutar_cruce(df)
+                            
+                            if resultado is not None:
+                                st.session_state.cruce_resultado = resultado
+                                st.rerun()
                 else:
-                    st.success("✔️ Archivo válido")
-                    with st.expander("Vista previa del archivo"):
-                        st.dataframe(df_cruce.head(3))
-                    
-                    if st.button("🚀 Ejecutar Cruce", use_container_width=True):
-                        with st.spinner("Analizando 3.5M+ registros..."):
-                            resultados = ejecutar_cruce(df_cruce)
-                            st.session_state.resultados_cruce = resultados
-                            st.rerun()
-            
+                    st.error("Faltan columnas requeridas")
+
             except Exception as e:
-                st.error(f"Error en el archivo: {str(e)}")
+                st.error(f"Error: {str(e)}")
 
     with col2:
-        if "resultados_cruce" in st.session_state:
-            resultados = st.session_state.resultados_cruce
+        if "cruce_resultado" in st.session_state:
+            df_resultado = st.session_state.cruce_resultado
             
-            st.subheader("📌 Resultados del Cruce")
-            cols_metrics = st.columns(4)
-            with cols_metrics[0]:
-                st.metric("Total Procesados", f"{resultados['metricas']['total_procesados']:,}")
-            with cols_metrics[1]:
-                st.metric("Coincidencias Código", f"{resultados['metricas'].get('coincidencias_cod', 0):,}")
-            with cols_metrics[2]:
-                st.metric("Coincidencias NIT", f"{resultados['metricas'].get('coincidencias_nit', 0):,}")
-            with cols_metrics[3]:
-                st.metric("Sin Coincidencias", f"{resultados['metricas']['sin_coincidencia']:,}")
+            st.dataframe(
+                df_resultado,
+                use_container_width=True,
+                height=600,
+                column_config={
+                    "fechapago": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                    "fecha_gestion": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm")
+                }
+            )
             
-            tab1, tab2 = st.tabs(["Por Código", "Por NIT"])
-            with tab1:
-                st.dataframe(resultados['por_codcliente'].head(100)) 
-            with tab2:
-                st.dataframe(resultados['por_nitcliente'].head(100))
-            
+            # Botón de descarga
+            excel_buffer = BytesIO()
+            df_resultado.to_excel(excel_buffer, index=False)
             st.download_button(
-                label="📥 Descargar Reporte Completo",
-                data=descargar_excel({
-                    'METRICAS': generar_reporte_metricas(resultados['metricas']),
-                    'POR_CODCLIENTE': resultados['por_codcliente'],
-                    'POR_NITCLIENTE': resultados['por_nitcliente']
-                }),
-                file_name=f"reporte_cruce_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                label="Descargar resultados",
+                data=excel_buffer.getvalue(),
+                file_name="cruce_gestiones.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
 # ==============================================
