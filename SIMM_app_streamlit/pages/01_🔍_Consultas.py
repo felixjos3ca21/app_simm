@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent))
 # ==============================================
 # CONFIGURACIÓN GENERAL
 # ==============================================
-st.set_page_config(page_title="Consultas de Gestiones", page_icon="🕵️", layout="wide")
+st.set_page_config(page_title="Consultas de Gestiones", page_icon="🔍", layout="wide")
 
 # Estilos CSS personalizados
 st.markdown("""
