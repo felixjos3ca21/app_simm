@@ -165,6 +165,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         update_step("Agregando metadatos")
         df_procesado['archivo_origen'] = nombre_archivo
         df_procesado['fecha_carga'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        df_procesado['fecha_gestion_sencilla'] = df_procesado['Fecha gestión'].dt.strftime('%Y-%m-%d')
         df_errores['archivo_origen'] = nombre_archivo
         df_errores['fecha_carga'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 

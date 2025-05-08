@@ -3,7 +3,7 @@ import streamlit as st
 # Configuración de página DEBE SER EL PRIMER COMANDO STREAMLIT
 st.set_page_config(
     page_title="Carga y Actualización",
-    page_icon="🔄",
+    page_icon="src/utils/favicon-114x114.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -60,7 +60,7 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-
+st.image("src/utils/logo-andesbpo-359x143.png", width=150)
 # ==============================================================================
 # CLASE BASE: DataProcessor
 # ==============================================================================
@@ -116,8 +116,6 @@ class DataProcessor:
                 else:
                     # Procesamiento individual
                     self.df_procesado, self.df_errores, mensaje = self._procesar_archivo(archivo)
-                # Paso 1: Procesamiento inicial
-                self.df_procesado, self.df_errores, mensaje = self._procesar_archivo(archivo)
                 
                 if self.df_procesado.empty:
                     st.warning("⚠️ El archivo no contiene datos válidos")
@@ -238,6 +236,8 @@ class DataProcessor:
             progress_bar.empty()
             status_text.empty()
             
+            st.cache_data.clear()
+
             # Mostrar resumen final
             st.success(f"**Carga exitosa:** {registros_insertados} registros nuevos insertados")
             st.metric("Tiempo promedio", f"{len(chunks)/60:.2f} registros/segundo")
@@ -277,7 +277,8 @@ class GestionesProcessor(DataProcessor):
                 'Valor': 'valor',
                 'identificador_infraccion': 'identificador_infraccion',
                 'archivo_origen': 'archivo_origen',
-                'fecha_carga': 'fecha_carga'
+                'fecha_carga': 'fecha_carga',
+                'fecha_gestion': 'fecha_gestion'
             },
             'id_column': 'id_registro',
             'clean_function': preparar_datos
@@ -286,9 +287,15 @@ class GestionesProcessor(DataProcessor):
         
     def _procesar_archivo(self, archivo):
         """Implementación específica de limpieza para gestiones"""
-        df_procesado, df_errores, mensaje = preparar_datos(archivo, archivo.name)
-        df_renombrado = df_procesado.rename(columns=self.config['mapeo_columnas'])
-        return df_renombrado, df_errores, mensaje  # Asegurar 3 valores de retorno
+        try:
+            df_procesado, df_errores, mensaje = preparar_datos(archivo, archivo.name)
+            if df_procesado.empty:
+                return pd.DataFrame(), df_errores, mensaje
+            
+            df_renombrado = df_procesado.rename(columns=self.config['mapeo_columnas'])
+            return df_renombrado, df_errores, mensaje
+        except Exception as e:
+            return pd.DataFrame(), pd.DataFrame({'error': [str(e)]}), str(e)
 
 class SMSProcessor(DataProcessor):
     """Procesador específico para SMS"""
@@ -520,8 +527,10 @@ class StreamlitUI:
         if archivos:
             # Reiniciar estado al cargar nuevos archivos
             if 'procesado' not in st.session_state:
-                st.session_state.procesado = False
-                st.session_state.processor = None
+                st.session_state.update({
+                    'procesado': False,
+                    'processor': None
+                })
             
             col1, col2 = st.columns([2, 3])
             
@@ -536,31 +545,34 @@ class StreamlitUI:
                     
                     if processor_class:
                         processor = processor_class(self.engine)
+                        success = False
                         
-                        # Lógica especial para Pagos
-                        if self.modulo == "Pagos":
-                            # Pasar TODOS los archivos (no hay [0])
-                            if processor.procesar_archivo(archivos):
+                        try:
+                            if self.modulo == "Pagos":
+                                success = processor.procesar_archivo(archivos)
+                            else:
+                                success = processor.procesar_archivo(archivos[0] if isinstance(archivos, list) else archivos)
+                            
+                            if success:
                                 st.session_state.procesado = True
+                                st.session_state.processor = processor
                                 st.rerun()
-                        else:
-                            # Procesar solo el primer archivo (para otros módulos)
-                            if processor.procesar_archivo(archivos[0]):
-                                st.session_state.procesado = True
-                                st.rerun()
-                    else:
-                        st.error("Módulo no implementado")
+                        except Exception as e:
+                            st.error(f"Error al procesar: {str(e)}")
             
-            if st.session_state.procesado:
+            if st.session_state.procesado and st.session_state.processor is not None:
                 processor = st.session_state.processor
                 
                 # Mostrar resultados del procesamiento
                 with col2:
                     st.subheader("📊 Resultados del Procesamiento")
-                    st.metric("✅ Registros válidos  ", len(processor.df_procesado))
-                    st.metric("🆕 Registros nuevos", len(processor.nuevos))
-                    st.metric("📋 Registros duplicados", processor.duplicados)
-                    st.metric("❌ Errores detectados", len(processor.df_errores))
+                    if not processor.df_procesado.empty:
+                        st.metric("✅ Registros válidos", len(processor.df_procesado))
+                        st.metric("🆕 Registros nuevos", len(processor.nuevos))
+                        st.metric("📋 Registros duplicados", processor.duplicados)
+                        st.metric("❌ Errores detectados", len(processor.df_errores))
+                    else:
+                        st.warning("No hay datos procesados válidos")
                 
                 # Sección de carga condicional
                 if len(processor.nuevos) > 0:

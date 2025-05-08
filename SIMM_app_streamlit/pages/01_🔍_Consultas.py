@@ -6,12 +6,14 @@ from io import BytesIO
 import pandas as pd
 from src.database.postgres import get_connection
 
+
+
 sys.path.append(str(Path(__file__).parent))
 
 # ==============================================
 # CONFIGURACIÓN GENERAL
 # ==============================================
-st.set_page_config(page_title="Consultas de Gestiones", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="Consultas de Gestiones", page_icon="src/utils/favicon-114x114.png", layout="wide")
 
 # Estilos CSS personalizados
 st.markdown("""
@@ -31,12 +33,12 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-
+st.image("src/utils/logo-andesbpo-359x143.png", width=150)
 # ==============================================
 # FUNCIONES DE DATOS
 # ==============================================
-@st.cache_data
-def get_total_records():
+@st.cache_data(ttl=300) 
+def get_total_records(_=None):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM gestiones")
@@ -198,7 +200,8 @@ def crear_seccion(titulo, nivel=3):
 # ==============================================
 def mostrar_vista_resumen():
     st.header("📊 Resumen Base de Datos Gestiones")
-    total_registros = get_total_records()
+    trigger = st.session_state.get('cache_trigger', 0)
+    total_registros = get_total_records(trigger)
     
     # Sección de KPIs
     cols = st.columns(3)
@@ -326,7 +329,7 @@ def mostrar_vista_cruce():
         if uploaded_file:
             try:
                 # Leer archivo SIN dayfirst
-                df = pd.read_excel(uploaded_file)
+                df = pd.read_excel(uploaded_file, sheet_name='BASE PAGOS')
                 
                 # Convertir fecha después de leer
                 df['fechapago'] = pd.to_datetime(

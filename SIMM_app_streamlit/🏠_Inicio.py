@@ -1,23 +1,29 @@
 import streamlit as st
 
-# Configuración global (compartida para todas las páginas)
+# ==============================================
+# CONFIGURACIÓN GLOBAL 
+# ==============================================
 st.set_page_config(
-    page_title="SIMM Dashboard",
-    page_icon="📊",
+    page_title="SIAMM",
+    page_icon="src/utils/favicon-114x114.png",
     layout="wide"
 )
-
-# Página de inicio
+st.image("src/utils/logo-andesbpo-359x143.png", width=250)
+# Configuración global (compartida para todas las páginas).png", width=100)
+# ==============================================
+# CONTENIDO PRINCIPAL DE LA PÁGINA
+# ==============================================
 def main():
     st.title("Bienvenido al Sistema de Información de ANDES - SIMM")
     st.markdown("""
-        **Selecciona una página en el menú lateral:**
-        - 🕵️‍♂️ `Consultas`: Análisis de gestiones existentes.
-        - ✏️ `Actualización`: Modificar o añadir registros.
+        ### Funcionalidades principales:
+        - 🕵️‍♂️ **Consultas**: Análisis detallado de gestiones existentes
+        - ✏️ **Actualización**: Modificación y carga de nuevos registros
+        - 📊 **Dashboards**: Reportes ejecutivos con indicadores clave
     """)
     
-    # Info de conexión (opcional)
-    if st.checkbox("Mostrar estado de conexión a PostgreSQL"):
+# Verificación de conexión (opcional)
+    if st.checkbox("🔌 Mostrar estado de conexión a PostgreSQL"):
         from src.database.postgres import get_connection
         try:
             conn = get_connection()
