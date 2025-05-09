@@ -1,4 +1,4 @@
-from limpieza_pagos import procesar_pagos  # Asumo que guardaste la función en este módulo
+from limpieza_pagos import procesar_pagos 
 import traceback
 import os
 import pandas as pd
