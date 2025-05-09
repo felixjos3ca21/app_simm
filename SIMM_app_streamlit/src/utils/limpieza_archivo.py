@@ -12,15 +12,17 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         # =============================================================================
         # 1. Configuración inicial y lectura
         # =============================================================================
-        total_steps = 12
+        total_steps = 13
         current_step = 0
         
         def update_step(message: str):
-            nonlocal current_step
-            current_step += 1
-            if update_progress:
+                nonlocal current_step
+                current_step += 1
                 progress = current_step / total_steps
-                update_progress(progress, f"Paso {current_step}/{total_steps}: {message}")
+                # Asegurar que no exceda 100%
+                progress = min(progress, 1.0)
+                if update_progress:
+                    update_progress(progress, f"Paso {current_step}/{total_steps}: {message}")
 
         update_step("Iniciando procesamiento")
         
@@ -160,16 +162,68 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         df_procesado = df[~mask_errores].copy()
 
         # =============================================================================
-        # 10. Metadatos finales
+        # 10. Normalización de nombres de columnas
+        # =============================================================================
+        update_step("Normalizando nombres de columnas")
+        
+        mapeo_columnas = {
+            'Id Gestion Campaña': 'id_gestion_campaña',
+            'Tipo documento': 'tipo_documento',
+            'Número documento': 'documento',
+            'Nombre': 'nombre_usuario',
+            'Fecha gestión': 'fecha_gestion',
+            'Tipo llamada': 'tipo_llamada',
+            'Código gestión': 'id_gestion',
+            'Resultado': 'resultado',
+            'Fecha Compromiso': 'fecha_compromiso',
+            'Funcionario': 'asesor',
+            'Campaña': 'campana',
+            'Teléfono': 'telefono',
+            'Obligación': 'obligacion',
+            'Nro. Comparendo': 'numero_comparendo',
+            'Valor': 'valor',
+            'id registro': 'id_registro',
+            
+        }
+        
+        df_procesado = df_procesado.rename(columns=mapeo_columnas)
+        df_errores = df_errores.rename(columns=mapeo_columnas)
+
+        # =============================================================================
+        # 11. Metadatos finales y fecha_gestion_sencilla
         # =============================================================================
         update_step("Agregando metadatos")
+        
+        # Generar fecha_gestion_sencilla usando la columna ya renombrada 'fecha_gestion'
+        df_procesado['fecha_gestion_sencilla'] = df_procesado['fecha_gestion'].dt.strftime('%Y-%m-%d')
         df_procesado['archivo_origen'] = nombre_archivo
         df_procesado['fecha_carga'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        df_procesado['fecha_gestion_sencilla'] = df_procesado['Fecha gestión'].dt.strftime('%Y-%m-%d')
+        df_procesado['id_gestion'] = df_procesado['id_gestion'].astype(str) 
+        # Convertir id_gestion_campaña a string
+        df_procesado['id_gestion_campaña'] = df_procesado['id_gestion_campaña'].astype(str)
         df_errores['archivo_origen'] = nombre_archivo
         df_errores['fecha_carga'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        # =============================================================================
+        # 12. Asegurar columnas necesarias
+        # =============================================================================
+        update_step("Asegurando columnas finales")
+        
+        columnas_finales = [
+            'id_registro', 'id_gestion_campaña', 'tipo_documento', 'documento',
+            'nombre_usuario', 'fecha_gestion', 'tipo_llamada', 'id_gestion',
+            'resultado', 'fecha_compromiso', 'asesor', 'campana', 'telefono',
+            'obligacion', 'numero_comparendo', 'valor', 'identificador_infraccion',
+            'archivo_origen', 'fecha_carga', 'fecha_gestion_sencilla'
+        ]
+        
+        # Asegurar que todas las columnas existan
+        df_procesado = df_procesado.reindex(columns=columnas_finales)
+        df_errores = df_errores.reindex(columns=columnas_finales + ['fecha_gestion_sencilla'])
+        update_step("Verificación final de datos")  # Paso 13
         return df_procesado, df_errores, "\n".join(errores_hojas)
+        
+        
 
     except Exception as e:
         raise ValueError(f"Error en paso {current_step}: {str(e)}")
