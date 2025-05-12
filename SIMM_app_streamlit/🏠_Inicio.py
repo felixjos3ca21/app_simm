@@ -1,4 +1,6 @@
 import streamlit as st
+from src.utils.fondo import set_background
+
 
 # ==============================================
 # CONFIGURACIÓN GLOBAL 
@@ -9,6 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 st.image("src/utils/logo-andesbpo-359x143.png", width=250)
+set_background("src/utils/bg-seccion.png")
 # Configuración global (compartida para todas las páginas).png", width=100)
 # ==============================================
 # CONTENIDO PRINCIPAL DE LA PÁGINA

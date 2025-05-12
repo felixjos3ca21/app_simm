@@ -4,6 +4,7 @@ from pathlib import Path
 import streamlit as st
 from io import BytesIO
 import pandas as pd
+from src.utils.fondo import set_background
 from src.database.postgres import get_connection
 
 
@@ -34,6 +35,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
+set_background("src/utils/bg-seccion.png")
 # ==============================================
 # FUNCIONES DE DATOS
 # ==============================================

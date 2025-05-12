@@ -16,6 +16,7 @@ from src.utils.limpieza_sms import preparar_datos_sms
 import os
 from src.utils.limpieza_pagos import procesar_pagos
 import tempfile
+from src.utils.fondo import set_background
 
 # ==============================================================================
 # ESTILOS PERSONALIZADOS 
@@ -56,7 +57,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
-
+set_background("src/utils/bg-seccion.png")
 # ==============================================================================
 # CLASE BASE: DataProcessor
 # ==============================================================================
