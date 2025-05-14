@@ -482,11 +482,12 @@ class PagosProcessor(DataProcessor):
             st.dataframe(df_display, use_container_width=True)
             
             # Totales generales
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             col1.metric("📄 Total Archivos", len(self.df_resumen))
             col2.metric("✅ Total Registros Válidos", self.df_resumen['registros_validos'].sum())
             col3.metric("🆕 Total Registros Nuevos", self.df_resumen['registros_nuevos'].sum())
-            col4.metric("⚠️ Total Errores", self.df_resumen['registros_con_errores'].sum())
+            col4.metric("📋 Total Registros Duplicados", self.df_resumen['registros_duplicados'].sum())
+            col5.metric("⚠️ Total Errores", self.df_resumen['registros_con_errores'].sum())
     
     def _cargar_todos_datos(self):
         """Carga todos los datos nuevos en la base de datos de una sola vez"""

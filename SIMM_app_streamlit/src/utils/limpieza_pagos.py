@@ -27,7 +27,70 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
                 continue
         
         return None
-
+    
+    def leer_archivo_con_codificacion(ruta_archivo):
+        """
+        Lee un archivo probando múltiples codificaciones, incluyendo un manejo especial para 'johab'
+        """
+        # Lista priorizada de codificaciones a probar
+        ENCODINGS = [
+            'utf-8', 
+            'ISO-8859-1',  # Latin-1
+            'cp1252',      # Windows Latin-1
+            'latin1', 
+            'ascii',
+            'johab'        # Codificación coreana que a veces aparece en sistemas antiguos
+        ]
+        
+        # Estrategia 1: Intentar con chardet primero
+        try:
+            import chardet
+            with open(ruta_archivo, 'rb') as f:
+                rawdata = f.read(100000)  # Lee los primeros 100KB para análisis
+                result = chardet.detect(rawdata)
+                if result['confidence'] > 0.85:
+                    encoding = result['encoding']
+                    try:
+                        return pd.read_csv(ruta_archivo, sep='\t', encoding=encoding, dtype=str)
+                    except:
+                        pass  # Si falla, continuamos con otras codificaciones
+        except:
+            pass
+        
+        # Estrategia 2: Probar todas las codificaciones conocidas
+        for encoding in ENCODINGS:
+            try:
+                # Configuración especial para archivos problematicos
+                df = pd.read_csv(
+                    ruta_archivo,
+                    sep='\t',
+                    encoding=encoding,
+                    dtype=str,
+                    on_bad_lines='warn',
+                    engine='python',
+                    encoding_errors='strict' if encoding != 'johab' else 'replace'
+                )
+                print(f"Archivo leído correctamente con codificación: {encoding}")
+                return df
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                print(f"Error con codificación {encoding}: {str(e)}")
+                continue
+        
+        # Estrategia 3: Último intento con manejo de errores
+        try:
+            return pd.read_csv(
+                ruta_archivo,
+                sep='\t',
+                encoding='utf-8',
+                dtype=str,
+                on_bad_lines='skip',
+                engine='python',
+                encoding_errors='replace'
+            )
+        except Exception as e:
+            raise ValueError(f"No se pudo leer el archivo con ninguna codificación. Error final: {str(e)}")
     try:
         # =============================================================================
         # 1. Configuración inicial
@@ -51,14 +114,9 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
         # =============================================================================
         update_step("Leyendo archivo TXT")
         try:
-            # Leer manteniendo todo como texto para evitar problemas con números grandes
-            def detect_encoding(file_path):
-                with open(file_path, 'rb') as f:
-                    result = chardet.detect(f.read(10000))
-                return result['encoding']
-
-            encoding = detect_encoding(ruta_archivo)
-            df = pd.read_csv(ruta_archivo, sep='\t', encoding=encoding, header=0, dtype=str)
+            df = leer_archivo_con_codificacion(ruta_archivo)
+            if df.empty:
+                raise ValueError("El archivo se leyó pero está vacío")
         except Exception as e:
             raise ValueError(f"Error leyendo archivo: {str(e)}")
 
@@ -66,8 +124,9 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
         # 3. Procesamiento según tipo de archivo
         # =============================================================================
         update_step("Identificando tipo de archivo")
-        
-        if nombre_archivo.startswith('Ap pagados'):
+        nombre_normalizado = nombre_archivo.replace('_', ' ').replace('-', ' ').strip().lower()
+
+        if nombre_normalizado.startswith('ap pagados'):
             # =============================================
             # Transformaciones para archivo AP PAGADOS
             # =============================================
@@ -113,7 +172,7 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
             df['nro_comparendo'] = ''
             df['identificador_infraccion'] = df['nro_acuerdo']
             
-        elif nombre_archivo.startswith('Comparend'):
+        elif any(x in nombre_normalizado for x in ['comparend', 'comparedos', 'comparados']):
             # =============================================
             # Transformaciones para archivo COMPARENDOS
             # =============================================
