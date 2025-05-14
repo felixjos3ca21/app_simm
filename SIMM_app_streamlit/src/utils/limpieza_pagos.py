@@ -4,22 +4,30 @@ from datetime import datetime
 import hashlib
 import numpy as np
 from typing import Tuple
+import chardet
 
 def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
     """
     Procesa archivos de pagos (TXT) y los prepara para carga en la tabla pagos.
-    
-    Args:
-        ruta_archivo: Ruta completa del archivo a procesar
-        nombre_archivo: Nombre del archivo (para metadatos)
-        update_progress: Función callback para actualizar progreso (opcional)
-        
-    Returns:
-        Tuple con:
-        - DataFrame de registros válidos
-        - DataFrame de registros con errores
-        - Mensajes de advertencia/errores
     """
+    def parse_fecha(fecha_str):
+        """Intenta parsear la fecha en múltiples formatos comunes."""
+        if pd.isna(fecha_str) or fecha_str == '':
+            return None
+        
+        formatos = [
+            '%d/%m/%Y %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y', 
+            '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y %H:%M:%S', '%Y/%m/%d %H:%M:%S'
+        ]
+        
+        for fmt in formatos:
+            try:
+                return pd.to_datetime(fecha_str, format=fmt, errors='raise')
+            except:
+                continue
+        
+        return None
+
     try:
         # =============================================================================
         # 1. Configuración inicial
@@ -44,7 +52,13 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
         update_step("Leyendo archivo TXT")
         try:
             # Leer manteniendo todo como texto para evitar problemas con números grandes
-            df = pd.read_csv(ruta_archivo, sep='\t', encoding='ISO-8859-1', header=0, dtype=str)
+            def detect_encoding(file_path):
+                with open(file_path, 'rb') as f:
+                    result = chardet.detect(f.read(10000))
+                return result['encoding']
+
+            encoding = detect_encoding(ruta_archivo)
+            df = pd.read_csv(ruta_archivo, sep='\t', encoding=encoding, header=0, dtype=str)
         except Exception as e:
             raise ValueError(f"Error leyendo archivo: {str(e)}")
 
@@ -76,6 +90,8 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
             if 'fecha_liquida' in df.columns:
                 df = df.rename(columns={'fecha_liquida': 'fecha_pago'})
             
+            df['fecha_pago'] = df['fecha_pago'].apply(parse_fecha)
+
             # Crear nombre_usuario
             if 'nombres' in df.columns and 'apellidos' in df.columns:
                 df['nombre_usuario'] = df['nombres'].str.cat(df['apellidos'], sep=' ', na_rep='').str.strip()
@@ -88,7 +104,7 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
             if 'nro_acuerdo' in df.columns:
                 df['nro_acuerdo'] = df['nro_acuerdo'].astype(str)
             if 'id_usuario' in df.columns:
-                df['documento'] = df['id_usuario'].astype(str)  # Mapeamos a documento
+                df['documento'] = df['id_usuario'].astype(str)  
             else:
                 df['documento'] = ''
                 warnings.append("Advertencia: No se encontró columna id_usuario (documento)")
@@ -97,7 +113,7 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
             df['nro_comparendo'] = ''
             df['identificador_infraccion'] = df['nro_acuerdo']
             
-        elif nombre_archivo.startswith('Comparendos pagados'):
+        elif nombre_archivo.startswith('Comparend'):
             # =============================================
             # Transformaciones para archivo COMPARENDOS
             # =============================================
@@ -120,6 +136,7 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
             # Renombrar columna
             if 'fecha_liquida_contrav' in df.columns:
                 df = df.rename(columns={'fecha_liquida_contrav': 'fecha_pago'})
+            df['fecha_pago'] = df['fecha_pago'].apply(parse_fecha)
             
             # Llenar nro_comparendo con nro_resolucion si está vacío
             if 'nro_comparendo' in df.columns and 'nro_resolucion' in df.columns:
@@ -207,13 +224,13 @@ def procesar_pagos(ruta_archivo: str, nombre_archivo: str, update_progress=None)
         
         df['id_registro'] = df.apply(
             lambda x: hashlib.sha256((
-                f"{x['nro_acuerdo']}_"
-                f"{x['nro_comparendo']}_"
-                f"{x['documento']}_"
-                f"{x['nombre_usuario']}_"
-                f"{x['valor']}_"
-                f"{x['consecutivo_cuota']}_"
-                f"{x['fecha_pago']}"
+                f"{x['nro_acuerdo'] or ''}_"
+                f"{x['nro_comparendo'] or ''}_"
+                f"{x['documento'] or ''}_"
+                f"{x['nombre_usuario'] or ''}_"
+                f"{x['valor'] or ''}_"
+                f"{x['consecutivo_cuota'] or ''}_"
+                f"{x['fecha_pago'] or ''}"
             ).encode()).hexdigest(),
             axis=1
         )

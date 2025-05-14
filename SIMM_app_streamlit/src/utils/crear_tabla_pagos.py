@@ -17,15 +17,15 @@ def crear_tabla_pagos():
         )
         sql_script = """
         CREATE TABLE IF NOT EXISTS pagos (
-            id_registro VARCHAR(64) PRIMARY KEY,          -- Hash único
+            id_registro VARCHAR(64) ,          -- Hash único
             nro_acuerdo VARCHAR(20),                      
-            nro_comparendo VARCHAR(50),                   
+            nro_comparendo VARCHAR(60),                   
             documento VARCHAR(20) NOT NULL,               -- Nuevo nombre (ex id_usuario)
-            nombre_usuario VARCHAR(50) NOT NULL,          -- Nuevo nombre (ex nombres)
+            nombre_usuario VARCHAR(100) NOT NULL,          -- Nuevo nombre (ex nombres)
             valor NUMERIC(15,2) NOT NULL,                 
             fecha_pago TIMESTAMP NOT NULL,                
-            archivo_origen VARCHAR(60) NOT NULL,          
-            identificador_infraccion VARCHAR(50),         -- Campo calculado
+            archivo_origen VARCHAR(75) NOT NULL,          
+            identificador_infraccion VARCHAR(60),         -- Campo calculado
             fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );"""
 

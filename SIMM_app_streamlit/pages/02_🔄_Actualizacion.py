@@ -322,7 +322,7 @@ class SMSProcessor(DataProcessor):
         return preparar_datos_sms(archivo, archivo.name)
     
 class PagosProcessor(DataProcessor):
-    """Procesador específico para pagos con mejor manejo de múltiples archivos"""
+    """Procesador específico para pagos con procesamiento por lotes"""
     
     def __init__(self, engine):
         config = {
@@ -344,16 +344,18 @@ class PagosProcessor(DataProcessor):
         }
         super().__init__(engine, config)
         self.archivos_procesados = []
+        self.resultados_procesamiento = []
+        self.df_resumen = pd.DataFrame()
         
     def _procesar_archivo(self, archivo):
-        """Implementación mejorada para manejar múltiples archivos"""
+        """Implementación específica de limpieza para pagos"""
         try:
             # Crear directorio temporal si no existe
             temp_dir = os.path.join(tempfile.gettempdir(), "simm_pagos")
             os.makedirs(temp_dir, exist_ok=True)
             
             # Manejar tanto UploadedFile como rutas directas
-            if hasattr(archivo, 'name'):  # Es un UploadedFile de Streamlit
+            if hasattr(archivo, 'name'):  
                 temp_path = os.path.join(temp_dir, archivo.name)
                 with open(temp_path, 'wb') as f:
                     f.write(archivo.getvalue())
@@ -362,7 +364,7 @@ class PagosProcessor(DataProcessor):
                 temp_path = archivo
                 nombre_archivo = os.path.basename(archivo)
             
-            # Procesar el archivo
+            # Procesar el archivo usando la función utilitaria
             df_procesado, df_errores, mensaje = procesar_pagos(temp_path, nombre_archivo)
             
             # Limpiar archivo temporal si lo creamos
@@ -394,6 +396,151 @@ class PagosProcessor(DataProcessor):
         except Exception as e:
             error_msg = f"Error procesando {getattr(archivo, 'name', archivo)}: {str(e)}"
             return pd.DataFrame(), pd.DataFrame({'error': [error_msg]}), error_msg
+        
+    def procesar_archivos_multiples(self, archivos):
+        """Procesa múltiples archivos y combina sus resultados"""
+        total_archivos = len(archivos)
+        
+        with st.status(f"🔄 Procesando {total_archivos} archivos...", expanded=True) as status:
+            self.df_procesado = pd.DataFrame()
+            self.df_errores = pd.DataFrame()
+            
+            # Crear dataframe para almacenar resumen
+            self.df_resumen = pd.DataFrame(columns=[
+                'nombre_archivo', 'registros_totales', 'registros_validos',
+                'registros_nuevos', 'registros_duplicados', 'registros_con_errores'
+            ])
+            
+            # Procesar cada archivo y acumular resultados
+            for idx, archivo in enumerate(archivos):
+                status.update(label=f"🔄 Procesando archivo {idx+1}/{total_archivos}: {archivo.name}")
+                
+                # Procesar archivo individual
+                df_actual, df_errores_actual, mensaje = self._procesar_archivo(archivo)
+                
+                if not df_actual.empty:
+                    # Guardar resultados de este archivo
+                    df_actual['archivo_origen'] = archivo.name
+                    
+                    # Verificar duplicados para este archivo
+                    nuevos_actual = verificar_duplicados(
+                        self.engine,
+                        df_actual,
+                        self.config['table_name'],
+                        self.config['id_column']
+                    )
+                    duplicados_actual = df_actual.shape[0] - len(nuevos_actual)
+                    
+                    # Acumular resultados
+                    self.df_procesado = pd.concat([self.df_procesado, df_actual])
+                    
+                    # Guardar resumen
+                    self.df_resumen.loc[len(self.df_resumen)] = {
+                        'nombre_archivo': archivo.name,
+                        'registros_totales': len(df_actual) + len(df_errores_actual),
+                        'registros_validos': len(df_actual),
+                        'registros_nuevos': len(nuevos_actual),
+                        'registros_duplicados': duplicados_actual,
+                        'registros_con_errores': len(df_errores_actual)
+                    }
+                
+                if not df_errores_actual.empty:
+                    df_errores_actual['archivo'] = archivo.name
+                    self.df_errores = pd.concat([self.df_errores, df_errores_actual])
+            
+            # Buscar duplicados en el conjunto final consolidado
+            if not self.df_procesado.empty:
+                self.nuevos = verificar_duplicados(
+                    self.engine,
+                    self.df_procesado,
+                    self.config['table_name'],
+                    self.config['id_column']
+                )
+                self.duplicados = self.df_procesado.shape[0] - len(self.nuevos)
+                
+                status.update(label=f"✅ Procesamiento completado: {len(self.nuevos)} registros nuevos", state="complete")
+                return True
+            else:
+                status.update(label="⚠️ No se encontraron registros válidos", state="error")
+                return False
+                
+    def mostrar_resumen_procesamiento(self):
+        """Muestra una tabla resumen del procesamiento de todos los archivos"""
+        if not self.df_resumen.empty:
+            st.subheader("📊 Resumen de procesamiento por archivo")
+            
+            # Formateamos para mejor visualización
+            df_display = self.df_resumen.copy()
+            df_display = df_display.style.format({
+                'registros_totales': '{:,.0f}',
+                'registros_validos': '{:,.0f}',
+                'registros_nuevos': '{:,.0f}',
+                'registros_duplicados': '{:,.0f}',
+                'registros_con_errores': '{:,.0f}'
+            })
+            
+            st.dataframe(df_display, use_container_width=True)
+            
+            # Totales generales
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("📄 Total Archivos", len(self.df_resumen))
+            col2.metric("✅ Total Registros Válidos", self.df_resumen['registros_validos'].sum())
+            col3.metric("🆕 Total Registros Nuevos", self.df_resumen['registros_nuevos'].sum())
+            col4.metric("⚠️ Total Errores", self.df_resumen['registros_con_errores'].sum())
+    
+    def _cargar_todos_datos(self):
+        """Carga todos los datos nuevos en la base de datos de una sola vez"""
+        if not hasattr(self, 'nuevos') or self.nuevos.empty:
+            st.warning("No hay datos nuevos para cargar")
+            return False
+            
+        try:
+            total_registros = len(self.nuevos)
+            chunk_size = 5000
+            chunks = [self.nuevos[i:i + chunk_size] 
+                    for i in range(0, total_registros, chunk_size)]
+            
+            status_text = st.empty()
+            progress_bar = st.progress(0)
+            registros_insertados = 0
+            
+            with self.engine.begin() as conn:
+                for i, chunk in enumerate(chunks):
+                    # Actualizar progreso
+                    progress = (i + 1) / len(chunks)
+                    status_text.markdown(f"""
+                        **Progreso de carga:**  
+                        • Lotes procesados: `{i+1}/{len(chunks)}`  
+                        • Registros insertados: `{registros_insertados + len(chunk)}/{total_registros}`
+                    """)
+                    
+                    # Insertar chunk
+                    chunk.to_sql(
+                        name=self.config['table_name'],
+                        con=conn,
+                        if_exists='append',
+                        index=False,
+                        method='multi',
+                        chunksize=500
+                    )
+                    
+                    # Actualizar contadores
+                    registros_insertados += len(chunk)
+                    progress_bar.progress(progress)
+
+            # Limpiar elementos de progreso
+            progress_bar.empty()
+            status_text.empty()
+            
+            st.cache_data.clear()
+
+            # Mostrar resumen final
+            st.success(f"**Carga exitosa:** {registros_insertados} registros nuevos insertados")
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Error en la carga: {str(e)}")
+            raise
 
 # ==============================================================================
 # FUNCIONES UTILITARIAS
@@ -460,9 +607,6 @@ class StreamlitUI:
             st.session_state.update({
                 'procesado': False,
                 'processor': None,
-                'current_file_index': 0,
-                'all_files': None,
-                'total_files': 0,
                 'last_module': current_module
             })
     
@@ -545,8 +689,7 @@ class StreamlitUI:
             if 'procesado' not in st.session_state:
                 st.session_state.update({
                     'procesado': False,
-                    'processor': None,
-                    'current_file_index': 0
+                    'processor': None
                 })
             
             col1, col2 = st.columns([2, 3])
@@ -568,18 +711,21 @@ class StreamlitUI:
                         return
                     
                     try:
-                        # Procesar el primer archivo
+                        # Crear processor según el módulo
                         processor = processor_class(self.engine)
-                        success = processor.procesar_archivo(files_to_process[0])
+                        
+                        # Manejar de manera diferente según el número de archivos y tipo de procesador
+                        if self.modulo == "Carga de Pagos" and len(files_to_process) > 1:
+                            # Usar el procesamiento por lotes para pagos
+                            success = processor.procesar_archivos_multiples(files_to_process)
+                        else:
+                            # Procesamiento normal para un solo archivo
+                            success = processor.procesar_archivo(files_to_process[0])
                         
                         if success:
                             st.session_state.update({
                                 'procesado': True,
-                                'processor': processor,
-                                'all_files': files_to_process,
-                                'current_file_index': 0,
-                                'total_files': len(files_to_process),
-                                'processor_class': processor_class  # Guardar la clase para reutilizar
+                                'processor': processor
                             })
                             st.rerun()
                         else:
@@ -590,17 +736,15 @@ class StreamlitUI:
             
             if st.session_state.procesado and st.session_state.processor is not None:
                 processor = st.session_state.processor
-                current_file = st.session_state.all_files[st.session_state.current_file_index]
-                
-                # Mostrar progreso de múltiples archivos
-                if st.session_state.total_files > 1:
-                    st.progress((st.session_state.current_file_index + 1) / st.session_state.total_files)
-                    st.caption(f"Archivo {st.session_state.current_file_index + 1} de {st.session_state.total_files}: {current_file.name}")
                 
                 # Mostrar resultados del procesamiento
                 with col2:
                     st.subheader("📊 Resultados del Procesamiento")
-                    if not processor.df_procesado.empty:
+                    
+                    # Mostrar resumen por archivo si es pagos con múltiples archivos
+                    if self.modulo == "Carga de Pagos" and hasattr(processor, 'mostrar_resumen_procesamiento'):
+                        processor.mostrar_resumen_procesamiento()
+                    elif not processor.df_procesado.empty:
                         cols = st.columns(4)
                         cols[0].metric("✅ Válidos", len(processor.df_procesado))
                         cols[1].metric("🆕 Nuevos", len(processor.nuevos))
@@ -609,55 +753,28 @@ class StreamlitUI:
                     else:
                         st.warning("No hay datos procesados válidos")
                 
-                # Sección de navegación para múltiples archivos
-                if st.session_state.total_files > 1:
-                    cols = st.columns([1, 2, 1])
-                    with cols[0]:
-                        if st.session_state.current_file_index > 0 and st.button("⏮ Anterior"):
-                            st.session_state.current_file_index -= 1
-                            st.rerun()
-                    
-                    with cols[1]:
-                        st.caption(f"Progreso: {st.session_state.current_file_index + 1}/{st.session_state.total_files}")
-                    
-                    with cols[2]:
-                        if st.session_state.current_file_index < st.session_state.total_files - 1 and st.button("Siguiente ⏭"):
-                            try:
-                                # Usar la clase guardada en session_state
-                                next_processor = st.session_state.processor_class(self.engine)
-                                next_file = st.session_state.all_files[st.session_state.current_file_index + 1]
-                                success = next_processor.procesar_archivo(next_file)
-                                
-                                if success:
-                                    st.session_state.update({
-                                        'processor': next_processor,
-                                        'current_file_index': st.session_state.current_file_index + 1
-                                    })
-                                    st.rerun()
-                                else:
-                                    st.error("Error al procesar el siguiente archivo")
-                            except Exception as e:
-                                st.error(f"Error al cambiar de archivo: {str(e)}")
-                
                 # Sección de carga condicional
-                if len(processor.nuevos) > 0:
+                if hasattr(processor, 'nuevos') and len(processor.nuevos) > 0:
                     st.divider()
                     st.subheader("🚀 Carga de Datos")
+                    
+                    # Mostrar número total de registros a cargar
+                    st.info(f"Se cargarán {len(processor.nuevos)} registros nuevos en la base de datos")
                     
                     if st.button("✅ Confirmar e Iniciar Carga", 
                             type="primary", 
                             help="Haz clic para cargar los datos en la base de datos"):
                         try:
-                            if processor._cargar_datos():
-                                st.success("✅ Datos cargados exitosamente")
+                            # Usar el método específico para pagos con múltiples archivos si corresponde
+                            if self.modulo == "Carga de Pagos" and hasattr(processor, '_cargar_todos_datos'):
+                                success = processor._cargar_todos_datos()
+                            else:
+                                success = processor._cargar_datos()
                                 
-                                # Si hay más archivos, preparar el siguiente
-                                if st.session_state.current_file_index < st.session_state.total_files - 1:
-                                    st.session_state.procesado = False
-                                    st.rerun()
-                                else:
-                                    st.balloons()
-                                    st.session_state.procesado = False
+                            if success:
+                                st.success("✅ Datos cargados exitosamente")
+                                st.balloons()
+                                st.session_state.procesado = False
                         except Exception as e:
                             st.error(f"Error durante la carga: {str(e)}")
                 
@@ -670,8 +787,14 @@ class StreamlitUI:
                             
                         # Mostrar resumen primero
                         st.write("**Resumen de errores:**")
-                        error_counts = processor.df_errores['error'].value_counts()
-                        st.dataframe(error_counts.reset_index().rename(columns={'index': 'Tipo de error', 'error': 'Cantidad'}))
+                        
+                        # Para pagos con múltiples archivos, mostrar errores agrupados por archivo
+                        if 'archivo' in processor.df_errores.columns:
+                            error_summary = processor.df_errores.groupby(['archivo', 'error']).size().reset_index(name='cantidad')
+                            st.dataframe(error_summary)
+                        else:
+                            error_counts = processor.df_errores['error'].value_counts()
+                            st.dataframe(error_counts.reset_index().rename(columns={'index': 'Tipo de error', 'error': 'Cantidad'}))
                         
                         # Mostrar detalles
                         st.write("**Registros con errores:**")
