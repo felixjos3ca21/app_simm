@@ -25,11 +25,11 @@ st.markdown("""
     <style>
     /* Sidebar */
     [data-testid=stSidebar] {
-        background: #f0f2f6;
-        padding: 1rem;
-        border-right: 1px solid #e1e4e8;
+        background-color: #A6DEB7 !important;
     }
-    
+    .main-container {
+        padding: 2rem;
+            
     /* Radio buttons */
     div[role=radiogroup] {
         gap: 0.5rem;
@@ -620,7 +620,7 @@ class StreamlitUI:
         }
         
         with st.sidebar:
-            st.markdown('<div class="sidebar-title">Módulos Disponibles</div>', unsafe_allow_html=True)
+            st.header("Módulos Disponibles")
             
             # Usamos una clave única para el radio button
             modulo_seleccionado = st.radio(
