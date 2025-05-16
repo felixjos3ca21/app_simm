@@ -13,6 +13,18 @@ DB_CONFIG = {
     'port': '5432'
 }
 
+# Diccionarios para nombres en español
+MESES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+}
+
+DIAS = {
+    0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves",
+    4: "Viernes", 5: "Sábado", 6: "Domingo"
+}
+
 def crear_tabla_calendario():
     """Crea la tabla dim_calendario si no existe"""
     conn = psycopg2.connect(**DB_CONFIG)
@@ -20,7 +32,7 @@ def crear_tabla_calendario():
     
     try:
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dim_calendario (
+        CREATE TABLE IF NOT EXISTS calendario (
             fecha DATE PRIMARY KEY,
             dia INT,
             nombre_dia VARCHAR(10),
@@ -30,10 +42,7 @@ def crear_tabla_calendario():
             trimestre INT,
             año INT,
             semana_mes INT,
-            semana_anio INT,
-            es_fin_de_semana BOOLEAN,
-            es_feriado BOOLEAN DEFAULT FALSE,
-            nombre_feriado VARCHAR(100) DEFAULT NULL
+            semana_anio INT
         );
         """)
         conn.commit()
@@ -61,32 +70,31 @@ def obtener_rango_fechas():
         return fecha_min, fecha_max
     except Exception as e:
         print(f"❌ Error al obtener rango: {e}")
-        # Valores por defecto si hay error
         hoy = datetime.now().date()
         return hoy - timedelta(days=365), hoy
     finally:
         conn.close()
 
+
 def generar_datos_calendario(fecha_inicio, fecha_fin):
-    """Genera un DataFrame con todos los datos del calendario"""
+    """Genera un DataFrame con todos los datos del calendario en español"""
     rango_fechas = pd.date_range(start=fecha_inicio, end=fecha_fin, freq='D')
     datos = []
     
     for fecha in rango_fechas:
+        dia_num = fecha.day
+        mes_num = fecha.month
         datos.append({
             "fecha": fecha.date(),
-            "dia": fecha.day,
-            "nombre_dia": fecha.strftime('%A'),
+            "dia": dia_num,
+            "nombre_dia": DIAS[fecha.weekday()],
             "dia_semana": fecha.weekday() + 1,  # 1=Lunes, 7=Domingo
-            "mes": fecha.month,
-            "nombre_mes": fecha.strftime('%B'),
-            "trimestre": (fecha.month - 1) // 3 + 1,
+            "mes": mes_num,
+            "nombre_mes": MESES[mes_num],
+            "trimestre": (mes_num - 1) // 3 + 1,
             "año": fecha.year,
-            "semana_mes": (fecha.day - 1) // 7 + 1,  # Semana 1: días 1-7
-            "semana_anio": fecha.isocalendar()[1],
-            "es_fin_de_semana": fecha.weekday() >= 5,  # 5=Sab, 6=Dom
-            "es_feriado": False,
-            "nombre_feriado": None
+            "semana_mes": (dia_num - 1) // 7 + 1,
+            "semana_anio": fecha.isocalendar()[1]
         })
     
     return pd.DataFrame(datos)
@@ -97,20 +105,18 @@ def insertar_calendario_postgres(df):
     cursor = conn.cursor()
     
     try:
-        # Borrar datos existentes para evitar duplicados
-        cursor.execute("TRUNCATE TABLE dim_calendario;")
+        cursor.execute("TRUNCATE TABLE calendario;")
         
-        # Insertar nuevos datos
         for _, row in df.iterrows():
             cursor.execute("""
-            INSERT INTO dim_calendario (
+            INSERT INTO calendario (
                 fecha, dia, nombre_dia, dia_semana, mes, nombre_mes,
-                trimestre, año, semana_mes, semana_anio, es_fin_de_semana
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                trimestre, año, semana_mes, semana_anio
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """, (
                 row['fecha'], row['dia'], row['nombre_dia'], row['dia_semana'],
                 row['mes'], row['nombre_mes'], row['trimestre'], row['año'],
-                row['semana_mes'], row['semana_anio'], row['es_fin_de_semana']
+                row['semana_mes'], row['semana_anio']
             ))
         
         conn.commit()
@@ -123,19 +129,14 @@ def insertar_calendario_postgres(df):
         conn.close()
 
 if __name__ == "__main__":
-    print("\n⚡ Iniciando generación de calendario...")
+    print("\n⚡ Iniciando generación de calendario en español...")
     
-    # Paso 1: Crear tabla si no existe
     crear_tabla_calendario()
-    
-    # Paso 2: Obtener rango de fechas desde gestiones
     fecha_inicio, fecha_fin = obtener_rango_fechas()
-    
-    # Paso 3: Generar DataFrame con todos los datos
     df_calendario = generar_datos_calendario(fecha_inicio, fecha_fin)
-    print(f"📊 Datos generados: {len(df_calendario)} filas")
     
-    # Paso 4: Insertar en PostgreSQL
+    print("\n🔍 Muestra de datos generados:")
+    print(df_calendario.head(3))
+    
     insertar_calendario_postgres(df_calendario)
-    
-    print("🎉 ¡Proceso completado!")
+    print("🎉 ¡Calendario generado con éxito!")
