@@ -30,4 +30,11 @@ if __name__ == "__main__":
     print("PostgreSQL version:", cursor.fetchone())
     conn.close()
 
-    
+def refresh_materialized_views():
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("REFRESH MATERIALIZED VIEW mv_id_gestiones")
+        conn.commit()
+    finally:
+        conn.close()
