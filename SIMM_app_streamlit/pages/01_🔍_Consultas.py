@@ -6,6 +6,7 @@ from datetime import datetime
 from src.database.postgres import get_connection
 from io import BytesIO
 import openpyxl
+from src.utils.fondo import set_background
 
 # Configuración de la página
 st.set_page_config(
@@ -74,6 +75,7 @@ st.markdown(f"""
 
 # Logo y fondo
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
+set_background("src/utils/bg-seccion.png")
 
 # Función para cargar datos base
 @st.cache_data(ttl=3600)
@@ -765,3 +767,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

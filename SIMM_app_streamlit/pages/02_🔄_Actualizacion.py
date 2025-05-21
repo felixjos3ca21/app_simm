@@ -194,6 +194,11 @@ class DataProcessor:
             registros_insertados = 0
             
             with self.engine.begin() as conn:
+                try:
+                    conn.execute(text(f"ALTER TABLE {self.config['table_name']} DISABLE TRIGGER ALL"))
+                except:
+                    pass
+                
                 for i, chunk in enumerate(chunks):
                     # Actualizar progreso
                     progress = (i + 1) / len(chunks)
@@ -210,8 +215,17 @@ class DataProcessor:
                         if_exists='append',
                         index=False,
                         method='multi',
-                        chunksize=500
+                        chunksize=chunk_size
                     )
+                    
+                    registros_insertados += len(chunk)
+                    progress_bar.progress(progress)
+                
+                # Rehabilitar índices
+                try:
+                    conn.execute(text(f"ALTER TABLE {self.config['table_name']} ENABLE TRIGGER ALL"))
+                except:
+                    pass
                     
                     # Actualizar contadores
                     registros_insertados += len(chunk)
