@@ -15,7 +15,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados (actualizados)
+# Estilos CSS personalizados 
 st.markdown(f"""
     <style>
     [data-testid="stSidebar"] {{
