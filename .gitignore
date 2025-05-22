@@ -1,3 +1,4 @@
 *.xlsx
 *.csv
 APP SIMM\app_simm\SIMM_app_streamlit\.env"
+APP SIMM\app_simm\venv
