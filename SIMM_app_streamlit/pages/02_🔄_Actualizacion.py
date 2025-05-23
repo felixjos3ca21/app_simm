@@ -1,7 +1,7 @@
 import streamlit as st  
 
 st.set_page_config(
-    page_title="Carga y Actualización",
+    page_title="SIAMM - Carga y Actualización",
     page_icon="src/utils/favicon-114x114.png",
     layout="wide",
     initial_sidebar_state="expanded"

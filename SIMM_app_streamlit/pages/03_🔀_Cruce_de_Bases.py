@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).parent))
 
 # Configuración de la página
 st.set_page_config(
-    page_title="SIAMM - Consultas",
+    page_title="SIAMM - Cruces de Bases",
     page_icon="src/utils/favicon-114x114.png",
     layout="wide"
 )
