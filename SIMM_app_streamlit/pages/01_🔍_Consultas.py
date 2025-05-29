@@ -488,7 +488,7 @@ def main():
         st.header("Métricas Principales")
         
         # Primera fila de métricas
-        cols = st.columns(4)
+        cols = st.columns(3)
         with cols[0]:
             st.markdown(f"""
                 <div class="metric-box">
@@ -497,15 +497,15 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
         
-        with cols[1]:
-            st.markdown(f"""
-                <div class="metric-box">
-                    <div class="metric-title">Documentos Únicos</div>
-                    <div class="metric-value">{stats['documentos_unicos']:,}</div>
-                </div>
-            """, unsafe_allow_html=True)
+        # with cols[1]:
+        #     st.markdown(f"""
+        #         <div class="metric-box">
+        #             <div class="metric-title">Documentos Únicos</div>
+        #             <div class="metric-value">{stats['documentos_unicos']:,}</div>
+        #         </div>
+        #     """, unsafe_allow_html=True)
         
-        with cols[2]:
+        with cols[1]:
             st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">Efectividad</div>
@@ -513,7 +513,7 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
         
-        with cols[3]:
+        with cols[2]:
             st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">Compromisos</div>

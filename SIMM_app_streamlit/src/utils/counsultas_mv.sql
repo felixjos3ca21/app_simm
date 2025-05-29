@@ -168,16 +168,30 @@ FROM (
     FROM pagos
 ) t
 WHERE rn = 1
-and fecha_pago >= '2025-01-01':: DATE;  -- Solo la fila más reciente de cada grupo
+and fecha_pago >= '2025-01-01':: DATE;  
 
 
 
-select * from pagos
-where identificador_infraccion = '456340';
+select count(distinct(id_registro)) from pagos
+where fecha_pago >= '2025-04-01'::DATE
+and fecha_pago < '2025-05-01'::DATE;
+
+select fecha_pago from pagos
+where fecha_pago >= '2025-04-01'::DATE
+and fecha_pago < '2025-05-01'::DATE
+order by fecha_pago desc;
 
 
 
 REFRESH MATERIALIZED VIEW mv_gestiones_comparendo;
 REFRESH MATERIALIZED VIEW mv_sms_comparendos;
 REFRESH MATERIALIZED VIEW mv_gestiones_comparendo;
+
+
+
+
+
+
+
+
 

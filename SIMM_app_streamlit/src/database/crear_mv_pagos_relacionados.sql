@@ -94,3 +94,210 @@ SELECT
 FROM pagos_unicos p
 LEFT JOIN gestiones_asociadas g ON p.id_registro = g.id_registro AND g.rn_gestion = 1
 LEFT JOIN sms_asociados s ON p.id_registro = s.id_registro AND s.rn_sms = 1;
+
+
+
+CREATE MATERIALIZED VIEW mv_pagos_relacionados_3 AS
+WITH pagos_unicos AS (
+    SELECT DISTINCT ON (id_registro)
+        id_registro,
+        nro_acuerdo,
+        nro_comparendo,
+        documento,
+        nombre_usuario,
+        valor,
+        fecha_pago
+    FROM pagos
+	where fecha_pago >= '2025-04-01'::DATE
+		and fecha_pago < '2025-05-01'::DATE 
+    ORDER BY id_registro, fecha_pago DESC, valor DESC
+)
+SELECT 
+    pu.*,
+    -- ¿Tuvo al menos 1 gestión antes del pago?
+    CASE WHEN EXISTS (
+        SELECT 1 
+        FROM gestiones g 
+        WHERE (pu.nro_comparendo = g.numero_comparendo OR pu.nro_acuerdo = g.numero_comparendo)
+        AND pu.documento = g.documento
+        AND g.fecha_gestion <= pu.fecha_pago
+    ) THEN TRUE ELSE FALSE END AS tiene_gestion,
+    
+    -- ¿Tuvo al menos 1 SMS antes del pago?
+    CASE WHEN EXISTS (
+        SELECT 1 
+        FROM sms s 
+        WHERE (pu.nro_comparendo = s.numero_comparendo OR pu.nro_acuerdo = s.numero_comparendo)
+        AND pu.documento = s.documento
+        AND s.fecha_sms <= pu.fecha_pago
+    ) THEN TRUE ELSE FALSE END AS tiene_sms,
+    
+    -- Fecha de la última gestión (si existe)
+    (
+        SELECT g.fecha_gestion
+        FROM gestiones g
+        WHERE (pu.nro_comparendo = g.numero_comparendo OR pu.nro_acuerdo = g.numero_comparendo)
+        AND pu.documento = g.documento
+        AND g.fecha_gestion <= pu.fecha_pago
+        ORDER BY g.fecha_gestion DESC
+        LIMIT 1
+    ) AS ultima_gestion_fecha,
+    
+    -- Fecha del último SMS (si existe)
+    (
+        SELECT s.fecha_sms
+        FROM sms s
+        WHERE (pu.nro_comparendo = s.numero_comparendo OR pu.nro_acuerdo = s.numero_comparendo)
+        AND pu.documento = s.documento
+        AND s.fecha_sms <= pu.fecha_pago
+        ORDER BY s.fecha_sms DESC
+        LIMIT 1
+    ) AS ultimo_sms_fecha
+FROM pagos_unicos pu;
+
+select * from mv_pagos_relacionados_2
+;
+
+
+SELECT
+    'Pagos con al menos 1 gestión' AS tipo,
+    SUM(valor) AS total_valor
+FROM mv_pagos_relacionados_2
+WHERE 
+    tiene_gestion = TRUE
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01'
+
+UNION ALL
+
+SELECT
+    'Pagos con al menos 1 SMS' AS tipo,
+    SUM(valor) AS total_valor
+FROM mv_pagos_relacionados_2
+WHERE 
+    tiene_sms = TRUE
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01'
+
+UNION ALL
+
+SELECT
+    'Pagos con gestión Y SMS' AS tipo,
+    SUM(valor) AS total_valor
+FROM mv_pagos_relacionados_2
+WHERE 
+    (tiene_gestion = TRUE or
+     tiene_sms = TRUE)
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01'
+
+UNION ALL
+
+SELECT
+    'Pagos sin gestión ni SMS' AS tipo,
+    SUM(valor) AS total_valor
+FROM mv_pagos_relacionados_2
+WHERE 
+    tiene_gestion = FALSE
+    AND tiene_sms = FALSE
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01';
+
+
+SELECT 
+    SUM(total_valor) AS suma_categorias,
+    (SELECT SUM(valor) FROM mv_pagos_relacionados_2 
+     WHERE fecha_pago >= '2025-04-01' 
+    		AND fecha_pago < '2025-05-01') AS total_real
+FROM (
+    SELECT tipo_interaccion, SUM(valor) AS total_valor
+    FROM (
+        SELECT
+            CASE
+                WHEN tiene_gestion AND tiene_sms THEN 'Gestión Y SMS'
+                WHEN tiene_gestion THEN 'Solo Gestión'
+                WHEN tiene_sms THEN 'Solo SMS'
+                ELSE 'Sin interacción'
+            END AS tipo_interaccion,
+            valor
+        FROM mv_pagos_relacionados_2
+        WHERE fecha_pago >= '2025-04-01' 
+    		AND fecha_pago < '2025-05-01'
+    ) t
+    GROUP BY tipo_interaccion
+) categorias;
+
+
+SELECT
+    CASE
+        WHEN tiene_gestion = TRUE and tiene_sms = TRUE THEN 'Gestión Y SMS'
+        WHEN tiene_gestion = TRUE THEN 'Solo Gestión'
+        WHEN tiene_sms = TRUE THEN 'Solo SMS'
+        ELSE 'Sin interacción'
+    END AS tipo_interaccion,
+    SUM(valor) AS total_valor,
+    COUNT(*) AS cantidad_pagos
+FROM mv_pagos_relacionados_2
+WHERE fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01'
+GROUP BY tipo_interaccion
+ORDER BY total_valor DESC;
+
+SELECT 
+    'Pagos con al menos 1 gestión' AS tipo,
+    SUM(valor) AS total_pagado,
+    COUNT(*) AS cantidad_pagos,
+    ROUND(AVG(valor), 2) AS promedio_pago
+FROM mv_pagos_relacionados_2
+WHERE 
+    tiene_gestion = TRUE  -- Filtra solo pagos con gestión
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01';
+
+SELECT 
+    'Pagos con al menos 1 sms' AS tipo,
+    SUM(valor) AS total_pagado,
+    COUNT(*) AS cantidad_pagos,
+    ROUND(AVG(valor), 2) AS promedio_pago
+FROM mv_pagos_relacionados_2
+WHERE 
+    tiene_sms = TRUE  -- Filtra solo pagos con gestión
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01';
+
+
+
+-- Suma de valores donde hubo gestión, SMS o ambos (Abril 2025)
+
+SELECT 
+    'Pagos con gestión y/o SMS' AS tipo,
+    SUM(valor) AS total_pagado,
+    COUNT(*) AS cantidad_pagos
+FROM mv_pagos_relacionados_2
+WHERE 
+    (tiene_gestion = TRUE OR tiene_sms = TRUE)  -- Al menos uno de los dos
+    AND fecha_pago >= '2025-04-01' 
+    AND fecha_pago < '2025-05-01';
+
+SELECT
+    CASE
+        WHEN tiene_gestion AND tiene_sms THEN 'Ambos (Gestión + SMS)'
+        WHEN tiene_gestion THEN 'Solo Gestión'
+        WHEN tiene_sms THEN 'Solo SMS'
+    END AS tipo_interaccion,
+    SUM(valor) AS total_pagado,
+    COUNT(*) AS cantidad_pagos,
+    ROUND(SUM(valor) * 100.0 / (
+        SELECT SUM(valor) 
+        FROM mv_pagos_relacionados_2 
+        WHERE fecha_pago BETWEEN '2025-04-01' AND '2025-04-30'
+    ), 2) AS porcentaje_total
+FROM mv_pagos_relacionados_2
+WHERE 
+    (tiene_gestion = TRUE OR tiene_sms = TRUE)
+    AND fecha_pago BETWEEN '2025-04-01' AND '2025-04-30'
+GROUP BY tipo_interaccion
+ORDER BY total_pagado DESC;
+
+
+select * from mv_gestiones_comparendo;
