@@ -15,6 +15,7 @@ from src.utils.limpieza_archivo import preparar_datos
 from src.utils.limpieza_sms import preparar_datos_sms
 import os
 from src.utils.limpieza_pagos import procesar_pagos
+from src.utils.limpieza_bases import preparar_datos_bases
 import tempfile
 from src.utils.fondo import set_background
 
@@ -557,6 +558,50 @@ class PagosProcessor(DataProcessor):
             st.error(f"❌ Error en la carga: {str(e)}")
             raise
 
+class BasesProcessor(DataProcessor):
+    """Procesador específico para Bases"""
+
+    def __init__(self, engine):
+        config = {
+            'table_name': 'bases',
+            'mapeo_columnas': {
+                'id_registro': 'id_registro',
+                'BASE': 'base',
+                'FECHA DE ENTREGA': 'fecha_entrega',
+                'TIPO DE DCTO': 'tipo_documento',
+                'IDENTIFICACIÓN': 'documento',
+                'NOMBRE': 'nombre',
+                'NRO. COMPARENDO': 'numero_comparendo',
+                'FECHA DE COMPARENDO': 'fecha_comparendo',
+                'CODIGO DE INFRACCIÓN': 'codigo_infraccion',
+                'PLACA': 'placa',
+                'valor': 'valor_infraccion',
+                'CEL1': 'telefono',
+                'archivo_origen': 'archivo_origen',
+                'fecha_carga': 'fecha_carga'
+            },
+            'id_column': 'id_registro',
+            'clean_function': preparar_datos_bases
+        }
+        super().__init__(engine, config)
+
+    def _procesar_archivo(self, archivo):
+        """
+        Llama a la función de limpieza y aplica el mapeo de columnas
+        para que coincida con la estructura de la tabla 'bases'.
+        """
+        df_procesado, df_errores, mensaje = preparar_datos_bases(archivo, archivo.name)
+
+        # Aplicar mapeo de columnas a df_procesado
+        mapeo = self.config["mapeo_columnas"]
+        df_procesado = df_procesado.rename(columns=mapeo)
+
+        # Aplicar mapeo a df_errores si contiene columnas relevantes
+        if not df_errores.empty:
+            df_errores = df_errores.rename(columns={k: v for k, v in mapeo.items() if k in df_errores.columns})
+
+        return df_procesado, df_errores, mensaje
+
 # ==============================================================================
 # FUNCIONES UTILITARIAS
 # ==============================================================================
@@ -630,7 +675,8 @@ class StreamlitUI:
         MODULOS = {
             "Carga de Gestiones": "🧮",
             "Carga de SMS": "📲",
-            "Carga de Pagos": "💰"
+            "Carga de Pagos": "💰",
+            "Carga de Bases": "📋"
         }
         
         with st.sidebar:
@@ -668,7 +714,8 @@ class StreamlitUI:
                 MODULO_ICONOS = {
                     "Carga de Gestiones": "🧮",
                     "Carga de SMS": "📲",
-                    "Carga de Pagos": "💰"
+                    "Carga de Pagos": "💰",
+                    "Carga de Bases": "📋"
                 }
                 icono = MODULO_ICONOS.get(self.modulo, "📁")
                 st.title(f"{icono} {self.modulo}")
@@ -716,7 +763,8 @@ class StreamlitUI:
                     MODULO_PROCESSORS = {
                         "Carga de Gestiones": GestionesProcessor,
                         "Carga de SMS": SMSProcessor,
-                        "Carga de Pagos": PagosProcessor
+                        "Carga de Pagos": PagosProcessor,
+                        "Carga de Bases": BasesProcessor
                     }
                     
                     processor_class = MODULO_PROCESSORS.get(self.modulo)

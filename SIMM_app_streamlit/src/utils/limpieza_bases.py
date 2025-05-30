@@ -24,8 +24,10 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
         # =============================================================================
         # 1. Configuración inicial
         # =============================================================================
-        total_steps = 8
+        total_steps = 9  # Aumentado a 9 pasos
         current_step = 0
+        warnings = []
+        errores_hojas = []
         
         def update_step(message: str):
             nonlocal current_step
@@ -36,113 +38,178 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
 
         update_step("Iniciando procesamiento de bases")
         
-        # Columnas requeridas (ajustar según tus archivos)
+        # Columnas requeridas (versión mejorada)
         columnas_requeridas = {
-            'BASE',
-            'FECHA DE ENTREGA',
-            'TIPO DE DCTO',
-            'IDENTIFICACIÓN',
-            'NOMBRE',
-            'NRO. COMPARENDO',
-            'FECHA DE COMPARENDO',
-            'VALOR INFRACCIÓN',
-            'CEL1'
+            'BASE': 'object',
+            'FECHA DE ENTREGA': 'datetime64[ns]',
+            'TIPO DE DCTO': 'object',
+            'IDENTIFICACIÓN': 'object',
+            'NOMBRE': 'object',  # Nota: En tu código original esperabas 'NOMBRE' pero en el error aparece 'NOMBRE' (con tilde)
+            'NRO. COMPARENDO': 'object',
+            'FECHA DE COMPARENDO': 'datetime64[ns]',  # Nueva columna que mencionas
+            'CODIGO DE INFRACCIÓN': 'object',  # Nueva columna que mencionas
+            'PLACA': 'object',  # Nueva columna que mencionas
+            'VALOR INFRACCIÓN': 'float64', 
+            'VALOR INTERESES': 'float64',  # Asegúrate que coincide exactamente con el nombre en el archivo
+            'CEL1': 'object'
         }
 
         # =============================================================================
-        # 2. Lectura y validación del archivo
+        # 2. Lectura inteligente del archivo
         # =============================================================================
         update_step("Leyendo archivo Excel")
         try:
+            xls = pd.ExcelFile(ruta_archivo)
+            if "REGISTROS" not in xls.sheet_names:
+                raise ValueError("La hoja 'REGISTROS' no existe en el archivo Excel.")
+            
+            df_all_columns = pd.read_excel(xls, sheet_name="REGISTROS", nrows=0)
+            
+            available_columns = df_all_columns.columns.tolist()
+            
+            # Mapeo de columnas 
+            column_mapping = {
+                'BASE': 'BASE',
+                'FECHA DE ENTREGA': 'FECHA DE ENTREGA',
+                'TIPO DE DCTO': 'TIPO DE DCTO',
+                'IDENTIFICACIÓN': 'IDENTIFICACIÓN',
+                'NOMBRE': 'NOMBRE',  
+                'NRO. COMPARENDO': 'NRO. COMPARENDO',
+                'FECHA DE COMPARENDO': 'FECHA DE COMPARENDO',
+                'CODIGO DE INFRACCIÓN': 'CODIGO DE INFRACCIÓN',
+                'PLACA': 'PLACA',
+                'VALOR INFRACCIÓN': 'VALOR INFRACCIÓN',
+                'VALOR INTERESES': 'VALOR INTERESES',  
+                'CEL1': 'CEL1'
+            }
+            
+            # Verificar qué columnas están realmente disponibles
+            columns_to_read = []
+            for db_col, file_col in column_mapping.items():
+                if file_col in available_columns:
+                    columns_to_read.append(file_col)
+                else:
+                    warnings.append(f"Columna no encontrada en archivo: {file_col} (se usará NULL para {db_col})")
+            
+            # Leer solo las columnas disponibles
             df = pd.read_excel(
                 ruta_archivo,
-                dtype={'IDENTIFICACIÓN': str, 'NRO. COMPARENDO': str, 'CEL1': str}
-            ).replace({'': pd.NA, ' ': pd.NA, 'NULL': pd.NA, 'nan': pd.NA, 'NaN': pd.NA})
+                sheet_name="REGISTROS",
+                usecols=columns_to_read,
+                dtype=columnas_requeridas,
+                parse_dates=['FECHA DE ENTREGA', 'FECHA DE COMPARENDO'],
+                na_values=['', ' ', 'NULL', 'nan', 'NaN', 'NaT']
+            )
+            
+            # Renombrar columnas al nombre estándar que espera el resto del código
+            df = df.rename(columns={v: k for k, v in column_mapping.items() if v in df.columns})
+            
+            # Asegurar que todas las columnas esperadas existan (crear las faltantes como NULL)
+            for col in columnas_requeridas:
+                if col not in df.columns:
+                    df[col] = pd.NA
         except Exception as e:
-            raise ValueError(f"Error leyendo archivo: {str(e)}")
-
-        # Verificar columnas requeridas
-        faltantes = columnas_requeridas - set(df.columns)
-        if faltantes:
-            raise ValueError(f"Columnas faltantes: {', '.join(faltantes)}")
+            raise ValueError(f"Error leyendo hoja 'REGISTROS': {str(e)}")
 
         # =============================================================================
-        # 3. Limpieza básica y normalización
+        # 3. Limpieza avanzada de datos
         # =============================================================================
         update_step("Normalizando datos")
         
-        # Limpieza de strings
+        # Limpieza de strings con manejo de NaN
+        def clean_string(x):
+            if pd.isna(x):
+                return x
+            return str(x).strip()
+            
         string_cols = ['BASE', 'TIPO DE DCTO', 'IDENTIFICACIÓN', 'NOMBRE', 'NRO. COMPARENDO']
-        df[string_cols] = df[string_cols].apply(lambda x: x.astype(str).str.strip())
-        
-        # Limpieza de teléfonos
-        df['CEL1'] = df['CEL1'].astype(str).str.replace(r'[^\d+]', '', regex=True)
-        
-        # Convertir valores numéricos
-        df['VALOR INFRACCIÓN'] = pd.to_numeric(df['VALOR INFRACCIÓN'], errors='coerce')
-        if 'VALOR INTERESES' in df.columns:
-            df['VALOR INTERESES'] = pd.to_numeric(df['VALOR INTERESES'], errors='coerce')
+        for col in string_cols:
+            if col in df.columns:
+                df[col] = df[col].apply(clean_string)
+
+        # Limpieza avanzada de teléfonos (conserva formato internacional)
+        if 'CEL1' in df.columns:
+            df['CEL1'] = df['CEL1'].astype(str).str.replace(r'[^\d\+]', '', regex=True)
+            df['CEL1'] = df['CEL1'].replace({'nan': pd.NA, 'None': pd.NA})
 
         # =============================================================================
-        # 4. Procesamiento de fechas
+        # 4. Procesamiento de valores numéricos (versión mejorada)
+        # =============================================================================
+        update_step("Procesando valores monetarios")
+        
+        try:
+            if 'VALOR INFRACCIÓN' not in df.columns:
+                df['VALOR INFRACCIÓN'] = 0.0
+            else:
+                df['VALOR INFRACCIÓN'] = pd.to_numeric(df['VALOR INFRACCIÓN'], errors='coerce')
+
+            if 'VALOR INTERESES' not in df.columns:
+                df['VALOR INTERESES'] = 0.0
+            else:
+                df['VALOR INTERESES'] = pd.to_numeric(df['VALOR INTERESES'], errors='coerce')
+
+            # Calcular suma fila por fila
+            df['valor'] = df[['VALOR INFRACCIÓN', 'VALOR INTERESES']].sum(axis=1, skipna=True)
+            df['valor'] = df['valor'].round(2)
+
+            # Eliminar columnas originales
+            df.drop(columns=['VALOR INFRACCIÓN', 'VALOR INTERESES'], errors='ignore', inplace=True)
+            
+        except Exception as e:
+            warnings.append(f"Error en cálculos de valor: {str(e)}")
+            df['valor'] = np.nan
+
+        # =============================================================================
+        # 5. Procesamiento robusto de fechas
         # =============================================================================
         update_step("Procesando fechas")
         
-        # Función para convertir fechas mixtas
-        def convertir_fecha(columna):
-            # Intenta formato fecha primero
-            fecha = pd.to_datetime(df[columna], errors='coerce')
-            
-            # Para los que fallan, extrae patrones de fecha
-            mascara_nulos = fecha.isna()
-            if mascara_nulos.any():
-                patrones_fecha = [
-                    r'(\d{2,4}[-/]\d{2}[-/]\d{2,4})',  # YYYY-MM-DD o DD-MM-YYYY
-                    r'(\d{2,4}\d{2}\d{2,4})',          # YYYYMMDD o DDMMYYYY
-                ]
-                
-                for patron in patrones_fecha:
-                    extracciones = df.loc[mascara_nulos, columna].astype(str).str.extract(patron)[0]
-                    fecha.loc[mascara_nulos] = pd.to_datetime(extracciones, errors='coerce')
-                    mascara_nulos = fecha.isna()
-            
-            return fecha
+        def parse_fecha(columna):
+            return pd.to_datetime(df[columna], errors='coerce', dayfirst=True).dt.date
 
-        df['FECHA DE ENTREGA'] = convertir_fecha('FECHA DE ENTREGA')
-        df['FECHA DE COMPARENDO'] = convertir_fecha('FECHA DE COMPARENDO')
+        # Aplicar a columnas de fecha como tipo `date`
+        if 'FECHA DE ENTREGA' in df.columns:
+            df['FECHA DE ENTREGA'] = parse_fecha('FECHA DE ENTREGA')
+            
+        if 'FECHA DE COMPARENDO' in df.columns:
+            df['FECHA DE COMPARENDO'] = parse_fecha('FECHA DE COMPARENDO')
 
         # =============================================================================
-        # 5. Generación de identificadores únicos
+        # 6. Generación de identificadores únicos mejorados
         # =============================================================================
         update_step("Generando identificadores")
         
-        # Hash único basado en campos clave
-        campos_hash = ['IDENTIFICACIÓN', 'NRO. COMPARENDO', 'FECHA DE COMPARENDO']
-        df['hash_unico'] = df[campos_hash].apply(
+        # Campos base para hash (ajustados según tu feedback)
+        campos_hash = ['BASE', 'IDENTIFICACIÓN', 'NRO. COMPARENDO']
+        
+        # Asegurar que los campos existan y manejar NaN
+        df_hash = df[campos_hash].fillna('NULL').astype(str)
+        
+        # Generar hash único más estable
+        df['hash_unico'] = df_hash.apply(
             lambda x: hashlib.sha256(
-                '|'.join([str(x[c]) if not pd.isna(x[c]) else 'NULL' for c in campos_hash]).encode()
+                '|'.join(x.values).encode()
             ).hexdigest(),
             axis=1
         )
         
-        # ID registro único
+        # ID registro con más información de contexto
         df['id_registro'] = df.apply(
             lambda x: hashlib.sha256((
                 f"{x['hash_unico']}_"
-                f"{x['FECHA DE ENTREGA'].timestamp() if pd.notnull(x['FECHA DE ENTREGA']) else 'NULL'}_"
-                f"{nombre_archivo}"
+                f"{str(x['FECHA DE ENTREGA']) if pd.notnull(x.get('FECHA DE ENTREGA')) else 'NULL'}_"
+                f"{nombre_archivo.lower()}"
             ).encode()).hexdigest(),
             axis=1
         )
 
         # =============================================================================
-        # 6. Mapeo a estructura de tabla 'bases'
+        # 7. Mapeo a estructura final con validación
         # =============================================================================
         update_step("Mapeando a estructura final")
         
         mapeo_columnas = {
             'id_registro': 'id_registro',
-            'hash_unico': 'hash_unico',
             'BASE': 'base',
             'FECHA DE ENTREGA': 'fecha_entrega',
             'TIPO DE DCTO': 'tipo_documento',
@@ -152,52 +219,71 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
             'FECHA DE COMPARENDO': 'fecha_comparendo',
             'CODIGO DE INFRACCIÓN': 'codigo_infraccion',
             'PLACA': 'placa',
-            'VALOR INFRACCIÓN': 'valor_infraccion',
+            'valor': 'valor_infraccion',
             'CEL1': 'telefono',
-            'VALOR INTERESES': 'valor_intereses'
         }
         
+        # Crear DataFrame final solo con columnas existentes
         df_final = pd.DataFrame()
         for col_db, col_archivo in mapeo_columnas.items():
-            if col_archivo in df.columns:
-                df_final[col_db] = df[col_archivo]
+            if col_db in df.columns:
+                df_final[col_db] = df[col_db]
         
-        # Campos adicionales
+        # Campos adicionales con validación
         df_final['archivo_origen'] = nombre_archivo[:100]
         df_final['fecha_carga'] = datetime.now()
 
         # =============================================================================
-        # 7. Validación y separación de errores
+        # 8. Validación avanzada de datos
         # =============================================================================
         update_step("Validando datos")
         
-        # Campos obligatorios
-        campos_obligatorios = ['documento', 'fecha_entrega']
-        df_final[campos_obligatorios] = df_final[campos_obligatorios].replace({
-            'nan': pd.NA, 'None': pd.NA, '': pd.NA
-        })
+        # Reglas de validación configurables
+        reglas_validacion = {
+            'base': lambda x: not pd.isna(x) and str(x).strip() != '',
+            'fecha_entrega': lambda x: pd.notna(x),
+            'documento': lambda x: pd.notna(x) and re.match(r'^[a-zA-Z0-9]{5,}$', str(x)),
+            'numero_comparendo': lambda x: pd.isna(x) or re.match(r'^[A-Za-z0-9\-]+$', str(x))
+        }
         
-        # Identificar errores
-        mask_errores = df_final[campos_obligatorios].isna().any(axis=1)
+        # Aplicar validaciones
+        df_final['errores'] = ''
+        for campo, validacion in reglas_validacion.items():
+            if campo in df_final.columns:
+                mask = ~df_final[campo].apply(validacion)
+                df_final.loc[mask, 'errores'] += f"{campo.upper()}_INVALIDO;"
+        
+        # Separar registros válidos de errores
+        mask_errores = df_final['errores'] != ''
         df_errores = df_final[mask_errores].copy()
         df_procesado = df_final[~mask_errores].copy()
         
-        # Asignar códigos de error
-        if not df_errores.empty:
-            df_errores['error'] = df_errores.apply(
-                lambda x: 'DOCUMENTO_VACIO' if pd.isna(x['documento']) else 'FECHA_ENTREGA_VACIA',
-                axis=1
-            )
+        # Limpiar columna temporal de errores
+        df_errores['error'] = df_errores['errores'].str.strip(';')
+        df_errores.drop(columns=['errores'], inplace=True)
+        df_procesado.drop(columns=['errores'], inplace=True)
+
+        # =============================================================================
+        # 9. Resultados finales y reportes
+        # =============================================================================
+        update_step("Generando reportes")
         
-        # =============================================================================
-        # 8. Resultados finales
-        # =============================================================================
-        update_step("Finalizando procesamiento")
+        # Estadísticas de calidad
+        stats = {
+            'total_registros': len(df),
+            'registros_validos': len(df_procesado),
+            'registros_con_errores': len(df_errores),
+            'errores_por_tipo': df_errores['error'].value_counts().to_dict(),
+            'warnings': warnings
+        }
         
         mensaje = (
-            f"Procesado completo. "
-            f"Registros válidos: {len(df_procesado)}, "
-            f"Errores: {len(df_errores)}"
+            f"Procesado completo:\n"
+            f"- Registros totales: {stats['total_registros']}\n"
+            f"- Registros válidos: {stats['registros_validos']}\n"
+            f"- Registros con errores: {stats['registros_con_errores']}\n"
+            f"- Tipos de errores: {', '.join(stats['errores_por_tipo'].keys()) if stats['errores_por_tipo'] else 'Ninguno'}\n"
+            f"- Advertencias: {', '.join(warnings) if warnings else 'Ninguna'}"
         )
         
         return df_procesado, df_errores, mensaje
