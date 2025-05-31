@@ -16,6 +16,7 @@ from src.utils.limpieza_sms import preparar_datos_sms
 import os
 from src.utils.limpieza_pagos import procesar_pagos
 from src.utils.limpieza_bases import preparar_datos_bases
+from src.database.postgres import DatabaseManager
 import tempfile
 from src.utils.fondo import set_background
 
@@ -59,6 +60,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
 set_background("src/utils/bg-seccion.png")
+
+engine = DatabaseManager.get_engine('SIMM')
 # ==============================================================================
 # CLASE BASE: DataProcessor
 # ==============================================================================

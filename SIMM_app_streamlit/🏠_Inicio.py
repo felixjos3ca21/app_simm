@@ -1,6 +1,6 @@
 import streamlit as st
 from src.utils.fondo import set_background
-
+from src.database.postgres import DatabaseManager
 
 # ==============================================
 # CONFIGURACIÓN GLOBAL 
@@ -11,6 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# Estilos CSS (se mantienen igual)
 st.markdown("""
     <style>
     /* Sidebar */
@@ -51,6 +52,41 @@ st.image("src/utils/logo-andesbpo-359x143.png", width=250)
 set_background("src/utils/bg-seccion.png")
 
 # ==============================================
+# FUNCIONES AUXILIARES
+# ==============================================
+@st.cache_resource
+def get_engines():
+    """Obtiene y cachea los engines de conexión para ambas bases"""
+    engines = {
+        'SIMM': DatabaseManager.get_engine('SIMM'),
+        'ANDES': DatabaseManager.get_engine('ANDES')
+    }
+    return engines
+
+def test_db_connections():
+    """Prueba las conexiones a ambas bases de datos"""
+    with st.expander("🔍 Probar conexiones a bases de datos"):
+        cols = st.columns(2)
+        
+        with cols[0]:
+            if st.button("Probar conexión a SIMM"):
+                try:
+                    with DatabaseManager.get_connection('SIMM') as conn:
+                        conn.cursor().execute("SELECT 1")
+                    st.success("✅ Conexión a SIMM exitosa")
+                except Exception as e:
+                    st.error(f"❌ Error conectando a SIMM: {str(e)}")
+        
+        with cols[1]:
+            if st.button("Probar conexión a Andes-Wolkvox"):
+                try:
+                    with DatabaseManager.get_connection('ANDES') as conn:
+                        conn.cursor().execute("SELECT 1")
+                    st.success("✅ Conexión a Andes-Wolkvox exitosa")
+                except Exception as e:
+                    st.error(f"❌ Error conectando a Andes-Wolkvox: {str(e)}")
+
+# ==============================================
 # CONTENIDO PRINCIPAL DE LA PÁGINA
 # ==============================================
 def main():
@@ -62,15 +98,11 @@ def main():
         - 📊 **Dashboards**: Reportes ejecutivos con indicadores clave
     """)
     
-# Verificación de conexión (opcional)
-    if st.checkbox("🔌 Mostrar estado de conexión a PostgreSQL"):
-        from src.database.postgres import get_connection
-        try:
-            conn = get_connection()
-            st.success("✅ Conexión exitosa a PostgreSQL")
-            conn.close()
-        except Exception as e:
-            st.error(f"❌ Error de conexión: {e}")
+    # Obtener conexiones (se cachean automáticamente)
+    engines = get_engines()
+    
+    # Mostrar estado de conexiones
+    test_db_connections()
 
 if __name__ == "__main__":
     main()

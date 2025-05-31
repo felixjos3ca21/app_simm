@@ -3,10 +3,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-from src.database.postgres import get_connection
 from io import BytesIO
 import openpyxl
 from src.utils.fondo import set_background
+from src.database.postgres import DatabaseManager
 
 # Configuración de la página
 st.set_page_config(
@@ -77,10 +77,12 @@ st.markdown(f"""
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
 set_background("src/utils/bg-seccion.png")
 
+conn = DatabaseManager.get_connection('SIMM') 
+
 # Función para cargar datos base
 @st.cache_data(ttl=3600)
 def load_base_data():
-    conn = get_connection()
+    conn = DatabaseManager.get_connection('SIMM') 
     try:
         # Obtener fechas mínimas/máximas
         fecha_min, fecha_max = pd.read_sql(
@@ -138,7 +140,7 @@ def load_base_data():
 
 @st.cache_data(ttl=300)
 def get_stats_by_asesor(fecha_inicio, fecha_fin, resultado="Todos", mes="Todos"):
-    conn = get_connection()
+    conn = DatabaseManager.get_connection('SIMM') 
     try:
         query = """
         SELECT 
@@ -188,7 +190,7 @@ def get_stats_by_asesor(fecha_inicio, fecha_fin, resultado="Todos", mes="Todos")
 # Función para obtener estadísticas con todos los filtros
 @st.cache_data(ttl=300)
 def get_stats(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos", mes="Todos"):
-    conn = get_connection()
+    conn = DatabaseManager.get_connection('SIMM') 
     try:
         query = """
         SELECT 
@@ -233,7 +235,7 @@ def get_stats(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos", mes="T
 # Función para obtener gestión diaria con todos los filtros
 @st.cache_data(ttl=300)
 def get_daily_counts(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos", mes="Todos"):
-    conn = get_connection()
+    conn = DatabaseManager.get_connection('SIMM') 
     try:
         query = """
         SELECT 
@@ -284,7 +286,7 @@ def get_daily_counts(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos",
 # Función para obtener datos diarios categorizados con todos los filtros
 @st.cache_data(ttl=300)
 def get_daily_data(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos", mes="Todos"):
-    conn = get_connection()
+    conn = DatabaseManager.get_connection('SIMM') 
     try:
         query = """
         SELECT 
@@ -329,7 +331,7 @@ def get_daily_data(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos", m
 # Función para obtener distribución por resultado con todos los filtros
 @st.cache_data(ttl=300)
 def get_result_distribution(fecha_inicio, fecha_fin, asesor="Todos", resultado="Todos", mes="Todos"):
-    conn = get_connection()
+    conn = DatabaseManager.get_connection('SIMM') 
     try:
         query = """
         SELECT 
@@ -488,7 +490,7 @@ def main():
         st.header("Métricas Principales")
         
         # Primera fila de métricas
-        cols = st.columns(3)
+        cols = st.columns(4)
         with cols[0]:
             st.markdown(f"""
                 <div class="metric-box">
@@ -497,15 +499,15 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
         
-        # with cols[1]:
-        #     st.markdown(f"""
-        #         <div class="metric-box">
-        #             <div class="metric-title">Documentos Únicos</div>
-        #             <div class="metric-value">{stats['documentos_unicos']:,}</div>
-        #         </div>
-        #     """, unsafe_allow_html=True)
-        
         with cols[1]:
+            st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">Documentos Únicos</div>
+                    <div class="metric-value">{stats['documentos_unicos']:,}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with cols[2]:
             st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">Efectividad</div>
@@ -513,7 +515,7 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
         
-        with cols[2]:
+        with cols[3]:
             st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">Compromisos</div>
