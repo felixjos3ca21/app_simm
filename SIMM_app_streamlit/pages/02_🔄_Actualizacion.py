@@ -1,5 +1,21 @@
-import streamlit as st  
+import streamlit as st
+import pandas as pd
+import os
+import tempfile
+from datetime import datetime
+from sqlalchemy import inspect, text
+from src.database.postgres import get_engine, DatabaseManager
+from src.utils.limpieza_archivo import preparar_datos
+from src.utils.limpieza_sms import preparar_datos_sms
+from src.utils.limpieza_pagos import procesar_pagos
+from src.utils.limpieza_bases import preparar_datos_bases
+from src.utils.fondo import set_background
+import time
 
+
+# ==============================================================================
+# CONFIGURACIÓN INICIAL
+# ==============================================================================
 st.set_page_config(
     page_title="SIAMM - Carga y Actualización",
     page_icon="src/utils/favicon-114x114.png",
@@ -7,61 +23,40 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-import pandas as pd
-from datetime import datetime
-from sqlalchemy import inspect, text
-from src.database.postgres import get_engine
-from src.utils.limpieza_archivo import preparar_datos
-from src.utils.limpieza_sms import preparar_datos_sms
-import os
-from src.utils.limpieza_pagos import procesar_pagos
-from src.utils.limpieza_bases import preparar_datos_bases
-from src.database.postgres import DatabaseManager
-import tempfile
-from src.utils.fondo import set_background
-
-# ==============================================================================
-# ESTILOS PERSONALIZADOS 
-# ==============================================================================
+# Estilos CSS
 st.markdown("""
     <style>
-    /* Sidebar */
     [data-testid=stSidebar] {
         background-color: #A6DEB7 !important;
     }
     .main-container {
         padding: 2rem;
-            
-    /* Radio buttons */
+    }
     div[role=radiogroup] {
         gap: 0.5rem;
     }
-    
-    /* Títulos */
     .sidebar .sidebar-title {
         color: #2c3e50;
         font-size: 1.2rem;
         margin-bottom: 1rem;
         font-weight: 600;
     }
-    
-    /* Instrucciones */
     .sidebar-instructions {
         color: #4a5568;
         font-size: 0.9rem;
         line-height: 1.5;
     }
-    
-    /* Hover effects */
     div[role=radiogroup] label:hover {
         background-color: #e2e8f0 !important;
     }
     </style>
 """, unsafe_allow_html=True)
+
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
 set_background("src/utils/bg-seccion.png")
 
 engine = DatabaseManager.get_engine('SIMM')
+
 # ==============================================================================
 # CLASE BASE: DataProcessor
 # ==============================================================================
@@ -368,6 +363,9 @@ class PagosProcessor(DataProcessor):
     def _procesar_archivo(self, archivo):
         """Implementación específica de limpieza para pagos"""
         try:
+            # Validación adicional del tipo de archivo
+            if hasattr(archivo, 'name') and not archivo.name.lower().endswith('.txt'):
+                return pd.DataFrame(), pd.DataFrame({'error': ['El archivo debe ser .txt']}), "Formato inválido"
             # Crear directorio temporal si no existe
             temp_dir = os.path.join(tempfile.gettempdir(), "simm_pagos")
             os.makedirs(temp_dir, exist_ok=True)
@@ -649,32 +647,32 @@ def verificar_duplicados(engine, df, table_name, id_column):
         st.stop()
 
 # ==============================================================================
-# INTERFAZ DE USUARIO StreamlitUI
+# INTERFAZ DE USUARIO - CORRECCIONES PRINCIPALES
 # ==============================================================================
 class StreamlitUI:
-    """Manejador principal de la interfaz de usuario"""
-    
     def __init__(self):
         self.engine = get_db_connection()
-        self._reset_session_state()
-        
-    def _reset_session_state(self):
-        """Resetea el estado de la sesión cuando cambia el módulo"""
-        if 'last_module' not in st.session_state:
-            st.session_state.last_module = None
+        self._initialize_session_state()
             
-        current_module = st.session_state.get('modulo_actual', None)
+    def _initialize_session_state(self):
+        """Inicializa el estado de la sesión"""
+        if 'modulo_actual' not in st.session_state:
+            st.session_state.modulo_actual = "Carga de Gestiones"
+        if 'uploaded_files' not in st.session_state:
+            st.session_state.uploaded_files = None
+        if 'procesado' not in st.session_state:
+            st.session_state.procesado = False
+        if 'processor' not in st.session_state:
+            st.session_state.processor = None
+            
+    def _reset_upload_state(self):
+        """Resetea el estado relacionado con la carga de archivos"""
+        st.session_state.uploaded_files = None
+        st.session_state.procesado = False
+        st.session_state.processor = None
         
-        # Si el módulo ha cambiado, resetear el estado
-        if st.session_state.last_module != current_module:
-            st.session_state.update({
-                'procesado': False,
-                'processor': None,
-                'last_module': current_module
-            })
-    
     def _mostrar_sidebar(self):
-        """Muestra la barra lateral de navegación con estilos mejorados"""
+        """Muestra la barra lateral de navegación"""
         MODULOS = {
             "Carga de Gestiones": "🧮",
             "Carga de SMS": "📲",
@@ -685,17 +683,17 @@ class StreamlitUI:
         with st.sidebar:
             st.header("Módulos Disponibles")
             
-            # Usamos una clave única para el radio button
+            # Usamos on_change para resetear el estado cuando cambia el módulo
             modulo_seleccionado = st.radio(
                 "Seleccione el módulo:",
                 options=list(MODULOS.keys()),
-                index=0,
+                index=list(MODULOS.keys()).index(st.session_state.modulo_actual),
                 format_func=lambda x: f"{MODULOS[x]} {x}",
-                key="modulo_actual"  # Clave importante para el seguimiento
+                key="modulo_radio",
+                on_change=self._reset_upload_state
             )
             
-            # Actualizar el módulo actual
-            self.modulo = modulo_seleccionado
+            st.session_state.modulo_actual = modulo_seleccionado
             
             st.markdown("---")
             st.markdown('<div class="sidebar-title">Instrucciones</div>', unsafe_allow_html=True)
@@ -708,61 +706,78 @@ class StreamlitUI:
             """, unsafe_allow_html=True)
     
     def _mostrar_carga_archivo(self):
-        """Componente de carga de archivo con reset automático"""
-        # Verificar si necesitamos resetear
-        self._reset_session_state()
+        """Componente de carga de archivo mejorado"""
+        MODULO_CONFIG = {
+            "Carga de Gestiones": {"extensions": ["xlsx"], "multiple": False, "icon": "🧮"},
+            "Carga de SMS": {"extensions": ["xlsx"], "multiple": False, "icon": "📲"}, 
+            "Carga de Pagos": {"extensions": ["txt"], "multiple": True, "icon": "💰"},
+            "Carga de Bases": {"extensions": ["xlsx"], "multiple": False, "icon": "📋"}
+        }
         
-        with st.container():
-            if self.modulo:
-                MODULO_ICONOS = {
-                    "Carga de Gestiones": "🧮",
-                    "Carga de SMS": "📲",
-                    "Carga de Pagos": "💰",
-                    "Carga de Bases": "📋"
-                }
-                icono = MODULO_ICONOS.get(self.modulo, "📁")
-                st.title(f"{icono} {self.modulo}")
-                
-                # Definir tipo de archivo según módulo
-                tipo = "xlsx" if self.modulo != "Carga de Pagos" else ["txt"]
-                
-                # Permitir múltiples archivos solo para pagos
-                multiple = self.modulo == "Carga de Pagos"
-                
-                # Usamos una clave única por módulo para el file_uploader
-                uploaded_files = st.file_uploader(
-                    f"Subir archivo{'s' if multiple else ''} {'Excel' if tipo == 'xlsx' else 'TXT'}",
-                    type=tipo,
-                    key=f"upload_{self.modulo}",  # Clave única por módulo
-                    help=f"Archivo {'Excel' if tipo == 'xlsx' else 'texto'} con extensión .{tipo}",
-                    accept_multiple_files=multiple
-                )
-                
-                return uploaded_files
-        return None
-
-    def ejecutar(self):
-        """Ejecuta la aplicación principal con manejo robusto de errores"""
-        self._mostrar_sidebar()
-        uploaded_files = self._mostrar_carga_archivo()
+        config = MODULO_CONFIG.get(st.session_state.modulo_actual, {})
+        
+        st.title(f"{config.get('icon', '📄')} {st.session_state.modulo_actual}")
+        
+        # Crear una key única que cambie cuando se resetea el estado
+        upload_key = f"uploader_{st.session_state.modulo_actual}_{hash(str(st.session_state.get('reset_timestamp', 0)))}"
+        
+        # Solución especial para el módulo de Pagos
+        if st.session_state.modulo_actual == "Carga de Pagos":
+            uploaded_files = st.file_uploader(
+                "Subir archivos TXT",
+                type=["txt"],  # Cambiado: usar string en lugar de lista
+                accept_multiple_files=True,
+                key=upload_key,
+                help="Solo se aceptan archivos con extensión .txt"
+            )
+        else:
+            uploaded_files = st.file_uploader(
+                f"Subir archivo{'s' if config['multiple'] else ''}",
+                type=config["extensions"],
+                accept_multiple_files=config["multiple"],
+                key=upload_key
+            )
         
         if uploaded_files:
-            # Convertir a lista si es un solo archivo
-            files_to_process = uploaded_files if isinstance(uploaded_files, list) else [uploaded_files]
+            # Convertir a lista si no lo es
+            if not isinstance(uploaded_files, list):
+                uploaded_files = [uploaded_files]
+                
+            # Validación adicional para archivos TXT
+            if st.session_state.modulo_actual == "Carga de Pagos":
+                valid_files = []
+                for file in uploaded_files:
+                    if file.name.lower().endswith('.txt'):
+                        valid_files.append(file)
+                    else:
+                        st.warning(f"Archivo {file.name} ignorado. Solo se aceptan .txt")
+                st.session_state.uploaded_files = valid_files if valid_files else None
+            else:
+                st.session_state.uploaded_files = uploaded_files
             
-            # Reiniciar estado al cargar nuevos archivos
-            if 'procesado' not in st.session_state:
-                st.session_state.update({
-                    'procesado': False,
-                    'processor': None
-                })
+            return len(st.session_state.uploaded_files) > 0 if st.session_state.uploaded_files else False
+        return False
+    
+    def ejecutar(self):
+        """Ejecuta la aplicación principal con correcciones"""
+        self._mostrar_sidebar()
+        
+        if st.button("🔄 Limpiar todo"):
+            self._reset_upload_state()
+            st.rerun()
+            
+        if self._mostrar_carga_archivo():
+            files = st.session_state.uploaded_files
+            if not isinstance(files, list):
+                files = [files]
+                
+            st.success(f"✅ Archivo{'s' if len(files)>1 else ''} cargado{'s' if len(files)>1 else ''} correctamente")
             
             col1, col2 = st.columns([2, 3])
             
             with col1:
                 st.subheader("⚙ Procesar Archivo")
                 if st.button("✅ Confirmar Procesar Archivo", type="primary"):
-                    # Mapeo de módulos a clases processor
                     MODULO_PROCESSORS = {
                         "Carga de Gestiones": GestionesProcessor,
                         "Carga de SMS": SMSProcessor,
@@ -770,110 +785,58 @@ class StreamlitUI:
                         "Carga de Bases": BasesProcessor
                     }
                     
-                    processor_class = MODULO_PROCESSORS.get(self.modulo)
-                    
-                    if processor_class is None:
-                        st.error("❌ Módulo no reconocido")
-                        return
+                    processor_class = MODULO_PROCESSORS.get(st.session_state.modulo_actual)
+                    processor = processor_class(self.engine)
                     
                     try:
-                        # Crear processor según el módulo
-                        processor = processor_class(self.engine)
-                        
-                        # Manejar de manera diferente según el número de archivos y tipo de procesador
-                        if self.modulo == "Carga de Pagos" and len(files_to_process) > 1:
-                            # Usar el procesamiento por lotes para pagos
-                            success = processor.procesar_archivos_multiples(files_to_process)
+                        if st.session_state.modulo_actual == "Carga de Pagos" and len(files) > 1:
+                            success = processor.procesar_archivos_multiples(files)
                         else:
-                            # Procesamiento normal para un solo archivo
-                            success = processor.procesar_archivo(files_to_process[0])
-                        
-                        if success:
-                            st.session_state.update({
-                                'procesado': True,
-                                'processor': processor
-                            })
-                            st.rerun()
-                        else:
-                            st.error("Error en el procesamiento inicial")
-                    except Exception as e:
-                        st.error(f"Error al procesar archivo: {str(e)}")
-                        st.stop()
-            
-            if st.session_state.procesado and st.session_state.processor is not None:
-                processor = st.session_state.processor
-                
-                # Mostrar resultados del procesamiento
-                with col2:
-                    st.subheader("📊 Resultados del Procesamiento")
-                    
-                    # Mostrar resumen por archivo si es pagos con múltiples archivos
-                    if self.modulo == "Carga de Pagos" and hasattr(processor, 'mostrar_resumen_procesamiento'):
-                        processor.mostrar_resumen_procesamiento()
-                    elif not processor.df_procesado.empty:
-                        cols = st.columns(4)
-                        cols[0].metric("✅ Válidos", len(processor.df_procesado))
-                        cols[1].metric("🆕 Nuevos", len(processor.nuevos))
-                        cols[2].metric("📋 Duplicados", processor.duplicados)
-                        cols[3].metric("❌ Errores", len(processor.df_errores))
-                    else:
-                        st.warning("No hay datos procesados válidos")
-                
-                # Sección de carga condicional
-                if hasattr(processor, 'nuevos') and len(processor.nuevos) > 0:
-                    st.divider()
-                    st.subheader("🚀 Carga de Datos")
-                    
-                    # Mostrar número total de registros a cargar
-                    st.info(f"Se cargarán {len(processor.nuevos)} registros nuevos en la base de datos")
-                    
-                    if st.button("✅ Confirmar e Iniciar Carga", 
-                            type="primary", 
-                            help="Haz clic para cargar los datos en la base de datos"):
-                        try:
-                            # Usar el método específico para pagos con múltiples archivos si corresponde
-                            if self.modulo == "Carga de Pagos" and hasattr(processor, '_cargar_todos_datos'):
-                                success = processor._cargar_todos_datos()
-                            else:
-                                success = processor._cargar_datos()
-                                
-                            if success:
-                                st.success("✅ Datos cargados exitosamente")
-                                st.balloons()
-                                st.session_state.procesado = False
-                        except Exception as e:
-                            st.error(f"Error durante la carga: {str(e)}")
-                
-                # Mostrar errores si existen
-                if not processor.df_errores.empty:
-                    with st.expander("🚨 Detalle de Errores", expanded=True):
-                        # Agregar columna de motivo del error si no existe
-                        if 'error' not in processor.df_errores.columns:
-                            processor.df_errores['error'] = 'Desconocido'
+                            success = processor.procesar_archivo(files[0])
                             
-                        # Mostrar resumen primero
-                        st.write("**Resumen de errores:**")
-                        
-                        # Para pagos con múltiples archivos, mostrar errores agrupados por archivo
-                        if 'archivo' in processor.df_errores.columns:
-                            error_summary = processor.df_errores.groupby(['archivo', 'error']).size().reset_index(name='cantidad')
-                            st.dataframe(error_summary)
+                        if success:
+                            st.session_state.procesado = True
+                            st.session_state.processor = processor
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"Error al procesar: {str(e)}")
+            
+            if st.session_state.procesado and st.session_state.processor:
+                processor = st.session_state.processor
+                self._mostrar_resultados(processor)
+    
+    def _mostrar_resultados(self, processor):
+        """Muestra los resultados del procesamiento"""
+        col1, col2 = st.columns([2, 3])
+        
+        with col2:
+            st.subheader("📊 Resultados del Procesamiento")
+            
+            if hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
+                cols = st.columns(4)
+                cols[0].metric("✅ Válidos", len(processor.df_procesado))
+                cols[1].metric("🆕 Nuevos", len(getattr(processor, 'nuevos', pd.DataFrame())))
+                cols[2].metric("📋 Duplicados", getattr(processor, 'duplicados', 0))
+                cols[3].metric("❌ Errores", len(getattr(processor, 'df_errores', pd.DataFrame())))
+            
+            if hasattr(processor, 'nuevos') and len(processor.nuevos) > 0:
+                st.divider()
+                st.subheader("🚀 Carga de Datos")
+                st.info(f"Se cargarán {len(processor.nuevos)} registros nuevos")
+                
+                if st.button("✅ Confirmar e Iniciar Carga", type="primary"):
+                    try:
+                        if st.session_state.modulo_actual == "Carga de Pagos":
+                            processor._cargar_todos_datos()
                         else:
-                            error_counts = processor.df_errores['error'].value_counts()
-                            st.dataframe(error_counts.reset_index().rename(columns={'index': 'Tipo de error', 'error': 'Cantidad'}))
-                        
-                        # Mostrar detalles
-                        st.write("**Registros con errores:**")
-                        st.dataframe(processor.df_errores)
-                        
-                        # Botón de descarga
-                        csv = processor.df_errores.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📥 Descargar errores completos",
-                            data=csv,
-                            file_name="errores_detallados.csv",
-                            mime="text/csv"
-                        )
+                            processor._cargar_datos()
+                        st.success("✅ Datos cargados exitosamente")
+                        st.balloons()
+                        self._reset_upload_state()
+                    except Exception as e:
+                        st.error(f"Error en carga: {str(e)}")
+
 # ==============================================================================
 # EJECUCIÓN PRINCIPAL
 # ==============================================================================
