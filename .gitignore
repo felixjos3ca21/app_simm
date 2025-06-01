@@ -1,4 +1,3 @@
-
 # Archivos de datos
 *.xlsx
 *.csv
@@ -10,16 +9,19 @@ venv/
 env/
 *.env
 
-# Entorno específico 
-app_simm/SIMM_app_streamlit/.env
+# Archivos de entorno (elimina la línea duplicada .gitignore)
+.env
 
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
+*.pyo
+*.pyd
 .pytest_cache/
 
 # Streamlit
-.streamlit
+.streamlit/ 
 
 # Sistema
 .DS_Store
