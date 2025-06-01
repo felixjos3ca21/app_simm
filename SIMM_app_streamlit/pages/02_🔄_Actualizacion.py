@@ -708,54 +708,25 @@ class StreamlitUI:
     def _mostrar_carga_archivo(self):
         """Componente de carga de archivo mejorado"""
         MODULO_CONFIG = {
-            "Carga de Gestiones": {"extensions": ["xlsx"], "multiple": False, "icon": "🧮"},
-            "Carga de SMS": {"extensions": ["xlsx"], "multiple": False, "icon": "📲"}, 
-            "Carga de Pagos": {"extensions": ["txt"], "multiple": True, "icon": "💰"},
-            "Carga de Bases": {"extensions": ["xlsx"], "multiple": False, "icon": "📋"}
+            "Carga de Gestiones": {"ext": ".xlsx", "multiple": False, "icon": "🧮"},
+            "Carga de SMS": {"ext": ".xlsx", "multiple": False, "icon": "📲"},
+            "Carga de Pagos": {"ext": ".txt", "multiple": True, "icon": "💰"},
+            "Carga de Bases": {"ext": ".xlsx", "multiple": False, "icon": "📋"}
         }
         
         config = MODULO_CONFIG.get(st.session_state.modulo_actual, {})
-        
         st.title(f"{config.get('icon', '📄')} {st.session_state.modulo_actual}")
         
-        # Crear una key única que cambie cuando se resetea el estado
-        upload_key = f"uploader_{st.session_state.modulo_actual}_{hash(str(st.session_state.get('reset_timestamp', 0)))}"
-        
-        # Solución especial para el módulo de Pagos
-        if st.session_state.modulo_actual == "Carga de Pagos":
-            uploaded_files = st.file_uploader(
-                "Subir archivos TXT",
-                type=["txt"],  # Cambiado: usar string en lugar de lista
-                accept_multiple_files=True,
-                key=upload_key,
-                help="Solo se aceptan archivos con extensión .txt"
-            )
-        else:
-            uploaded_files = st.file_uploader(
-                f"Subir archivo{'s' if config['multiple'] else ''}",
-                type=config["extensions"],
-                accept_multiple_files=config["multiple"],
-                key=upload_key
-            )
+        uploaded_files = st.file_uploader(
+            f"Subir archivo{'s' if config['multiple'] else ''}",
+            type=[config["ext"]],  # Lista con la extensión
+            accept_multiple_files=config["multiple"],
+            key=f"uploader_{st.session_state.modulo_actual}"
+        )
         
         if uploaded_files:
-            # Convertir a lista si no lo es
-            if not isinstance(uploaded_files, list):
-                uploaded_files = [uploaded_files]
-                
-            # Validación adicional para archivos TXT
-            if st.session_state.modulo_actual == "Carga de Pagos":
-                valid_files = []
-                for file in uploaded_files:
-                    if file.name.lower().endswith('.txt'):
-                        valid_files.append(file)
-                    else:
-                        st.warning(f"Archivo {file.name} ignorado. Solo se aceptan .txt")
-                st.session_state.uploaded_files = valid_files if valid_files else None
-            else:
-                st.session_state.uploaded_files = uploaded_files
-            
-            return len(st.session_state.uploaded_files) > 0 if st.session_state.uploaded_files else False
+            st.session_state.uploaded_files = uploaded_files
+            return True
         return False
     
     def ejecutar(self):
@@ -843,3 +814,5 @@ class StreamlitUI:
 if __name__ == "__main__":
     app = StreamlitUI()
     app.ejecutar()
+
+
