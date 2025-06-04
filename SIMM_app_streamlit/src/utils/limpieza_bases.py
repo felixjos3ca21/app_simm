@@ -262,6 +262,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
         df_errores['error'] = df_errores['errores'].str.strip(';')
         df_errores.drop(columns=['errores'], inplace=True)
         df_procesado.drop(columns=['errores'], inplace=True)
+        df_procesado['estado_telefono'] = ""
 
         # =============================================================================
         # 9. Resultados finales y reportes

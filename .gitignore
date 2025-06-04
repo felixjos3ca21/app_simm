@@ -1,0 +1,28 @@
+# Archivos de datos
+*.xlsx
+*.csv
+*.txt
+
+# Archivos de entorno
+.env
+*.env
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Streamlit
+.streamlit/ 
+
+# Sistema
+.DS_Store
+Thumbs.db

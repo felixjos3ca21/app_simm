@@ -28,7 +28,7 @@ st.markdown("""
     <style>
     /* Sidebar */
     [data-testid=stSidebar] {
-        background-color: #A6DEB7 !important;
+        background-color: #a5d6a7 !important;
     }
     .main-container {
         padding: 2rem;

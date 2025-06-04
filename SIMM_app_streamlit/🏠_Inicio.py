@@ -11,12 +11,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS (se mantienen igual)
+# Estilos CSS 
 st.markdown("""
     <style>
     /* Sidebar */
     [data-testid=stSidebar] {
-        background-color: #A6DEB7 !important;
+        background-color: #a5d6a7 !important;
     }
     .main-container {
         padding: 2rem;
@@ -29,9 +29,9 @@ st.markdown("""
     /* Títulos */
     .sidebar .sidebar-title {
         color: #2c3e50;
-        font-size: 1.2rem;
+        font-size: 4rem;
         margin-bottom: 1rem;
-        font-weight: 600;
+        font-weight: 800;
     }
     
     /* Instrucciones */

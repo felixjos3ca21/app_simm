@@ -27,7 +27,7 @@ st.set_page_config(
 st.markdown("""
     <style>
     [data-testid=stSidebar] {
-        background-color: #A6DEB7 !important;
+        background-color: #a5d6a7 !important;
     }
     .main-container {
         padding: 2rem;
@@ -579,7 +579,8 @@ class BasesProcessor(DataProcessor):
                 'valor': 'valor_infraccion',
                 'CEL1': 'telefono',
                 'archivo_origen': 'archivo_origen',
-                'fecha_carga': 'fecha_carga'
+                'fecha_carga': 'fecha_carga',
+                'eatado_telefono': 'estado_telefono'
             },
             'id_column': 'id_registro',
             'clean_function': preparar_datos_bases

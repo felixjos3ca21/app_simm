@@ -19,7 +19,7 @@ st.set_page_config(
 st.markdown(f"""
     <style>
     [data-testid="stSidebar"] {{
-        background-color: #A6DEB7 !important;
+        background-color: #a5d6a7 !important;
     }}
     .stSlider>div>div>div>div {{background: #4CAF50}}
     .metric-box {{
