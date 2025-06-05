@@ -631,8 +631,36 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 
                 result_sms = conn.execute(query_sms, params)
                 df_sms = pd.DataFrame(result_sms.fetchall(), columns=result_sms.keys())
+
+                query_Whatsapp = text("""
+                    SELECT 
+                        DATE(fecha_gestion_sencilla) AS fecha,
+                        COUNT(DISTINCT id_gestion) AS gestion_whatsapp
+                    FROM gestiones
+                    WHERE fecha_gestion_sencilla BETWEEN :fecha_inicio AND :fecha_fin
+                    AND tipo_chat ILIKE '%whatsapp%'
+                    GROUP BY DATE(fecha_gestion_sencilla)
+                    ORDER BY fecha DESC
+                """)
+                
+                result_gestion_whatsapp = conn.execute(query_Whatsapp, params)
+                df_gestion_whatsaap = pd.DataFrame(result_gestion_whatsapp.fetchall(), columns=result_gestion_whatsapp.keys())
+
+                query_Chat = text("""
+                    SELECT 
+                        DATE(fecha_gestion_sencilla) AS fecha,
+                        COUNT(DISTINCT id_gestion) AS gestion_chat
+                    FROM gestiones
+                    WHERE fecha_gestion_sencilla BETWEEN :fecha_inicio AND :fecha_fin
+                    AND tipo_chat ILIKE '%Chat alcaldia%'
+                    GROUP BY DATE(fecha_gestion_sencilla)
+                    ORDER BY fecha DESC
+                """)
+                
+                result_gestion_chat = conn.execute(query_Chat, params)
+                df_gestion_chat = pd.DataFrame(result_gestion_chat.fetchall(), columns=result_gestion_chat.keys())
             
-            # Datos de Andes-Wolkvox - CORRECCIÓN: Usar bloques separados
+            # Datos de Andes-Wolkvox 
             with engine_andes.connect() as conn:
                 query_campanas = text("""
                     SELECT 
@@ -695,6 +723,10 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 dataframes_disponibles.append(df_no_conectadas)
             if not df_manual.empty:
                 dataframes_disponibles.append(df_manual)
+            if not df_gestion_whatsaap.empty:
+                dataframes_disponibles.append(df_gestion_whatsaap)
+            if not df_gestion_chat.empty:
+                dataframes_disponibles.append(df_gestion_chat)
             
             if dataframes_disponibles:
                 # Comenzar con el primer DataFrame disponible
@@ -738,9 +770,9 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 with col4:
                     if 'contactos_no_conectadas' in df_final.columns:
                         total_no_conectadas = df_final['contactos_no_conectadas'].sum()
-                        st.metric("📞 No Conectadas", f"{total_no_conectadas:,}")
+                        st.metric("🚫 No Conectadas", f"{total_no_conectadas:,}")
                     else:
-                        st.metric("📞 No Conectadas", "N/A")
+                        st.metric("🚫 No Conectadas", "N/A")
                 
                 # Agregar métrica de contactos predictivos si existe
                 if 'contactos_predictivos' in df_final.columns:
@@ -748,13 +780,25 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
 
                     with col5:
                         total_predictivos = df_final['contactos_predictivos'].sum()
-                        st.metric("🎯 Contactos Predictivos", f"{total_predictivos:,}")
+                        st.metric("🤖 Contactos Predictivos", f"{total_predictivos:,}")
                     with col6:
                         if 'contactos_manual' in df_final.columns:
                             total_manual = df_final['contactos_manual'].sum()
-                            st.metric(" Contactos Manual", f"{total_manual:,}")
+                            st.metric("✋Contactos Manual", f"{total_manual:,}")
                         else:
-                            st.metric(" Contactos Manual", "N/A")
+                            st.metric("✋ Contactos Manual", "N/A")
+                    with col7:
+                        if 'gestion_whatsapp' in df_final.columns:
+                            total_whatsapp = df_final['gestion_whatsapp'].sum()
+                            st.metric("🟢 Gestion WhatsApp", f"{total_whatsapp:,}")
+                        else:
+                            st.metric("🟢 Gestion WhatsApp", "N/A")
+                    with col8:
+                        if 'gestion_chat' in df_final.columns:
+                            total_chat = df_final['gestion_chat'].sum()
+                            st.metric("📲 Gestion Chat Alcaldia", f"{total_chat:,}")
+                        else:
+                            st.metric("📲 Gestion Chat Alcaldia", "N/A")
                 
                 # Gráfico principal
                 columnas_disponibles = [col for col in df_final.columns if col != 'fecha']
@@ -790,7 +834,7 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 else:
                     st.error("No hay datos disponibles para graficar.")
                 # Tabla de datos
-                st.subheader("📊 Detalle por Fecha")
+                st.subheader("📅 Detalle por Fecha")
                 
                 # Formatear columnas para mejor visualización
                 column_config = {
