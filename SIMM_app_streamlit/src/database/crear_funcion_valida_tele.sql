@@ -156,6 +156,25 @@ WHERE estado_telefono IS NULL OR estado_telefono = '';
 
 -- Verificar resultados
 SELECT estado_telefono, COUNT(*) as cantidad
-FROM bases 
+FROM bases
+where fecha_entrega >= '2025-05-01'::DATE
+and fecha_entrega <= '2025-05-31'::DATE
 GROUP BY estado_telefono 
 ORDER BY cantidad DESC;
+
+
+
+
+
+select estado_telefono, count(*) from bases
+where fecha_entrega >= '2025-05-01'::DATE
+and fecha_entrega <= '2025-05-31'::DATE;
+
+SELECT 
+    COALESCE(estado_telefono, 'TOTAL') as estado_telefono, 
+    COUNT(*) as cantidad
+FROM bases
+WHERE fecha_entrega BETWEEN '2025-05-01' AND '2025-05-31'
+GROUP BY ROLLUP(estado_telefono)
+ORDER BY CASE WHEN estado_telefono IS NULL THEN 1 ELSE 0 END, cantidad DESC;
+

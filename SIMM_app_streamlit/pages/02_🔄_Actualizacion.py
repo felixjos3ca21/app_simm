@@ -181,33 +181,29 @@ class DataProcessor:
                 st.stop()
     
     def _cargar_datos(self):
-        """Carga los datos en la base de datos con seguimiento detallado"""
+        """Carga los datos en la base de datos con tolerancia a fallos de UI"""
+        if self.nuevos is None or self.nuevos.empty:
+            st.warning("⚠️ No hay registros nuevos para cargar.")
+            return False
+
         try:
             total_registros = len(self.nuevos)
-            chunk_size = 5000
-            chunks = [self.nuevos[i:i + chunk_size] 
-                    for i in range(0, total_registros, chunk_size)]
-            
+            chunk_size = 1000  # más pequeño para evitar demoras largas
+            chunks = [self.nuevos[i:i + chunk_size] for i in range(0, total_registros, chunk_size)]
+
+            # Variables de UI que podrían fallar si el cliente se desconecta
             status_text = st.empty()
             progress_bar = st.progress(0)
             registros_insertados = 0
-            
+
             with self.engine.begin() as conn:
                 try:
                     conn.execute(text(f"ALTER TABLE {self.config['table_name']} DISABLE TRIGGER ALL"))
-                except:
-                    pass
-                
+                except Exception as e:
+                    print("⚠️ No se pudieron deshabilitar los triggers:", e)
+
                 for i, chunk in enumerate(chunks):
-                    # Actualizar progreso
-                    progress = (i + 1) / len(chunks)
-                    status_text.markdown(f"""
-                        **Progreso de carga:**  
-                        • Lotes procesados: `{i+1}/{len(chunks)}`  
-                        • Registros insertados: `{registros_insertados + len(chunk)}/{total_registros}`
-                    """)
-                    
-                    # Insertar chunk
+                    # Insertar el chunk en la BD
                     chunk.to_sql(
                         name=self.config['table_name'],
                         con=conn,
@@ -216,35 +212,50 @@ class DataProcessor:
                         method='multi',
                         chunksize=chunk_size
                     )
-                    
                     registros_insertados += len(chunk)
-                    progress_bar.progress(progress)
-                
-                # Rehabilitar índices
+
+                    # Solo actualizar la interfaz cada 5 chunks para evitar fallos
+                    if i % 5 == 0 or i == len(chunks) - 1:
+                        progress = (i + 1) / len(chunks)
+                        try:
+                            progress_bar.progress(progress)
+                            status_text.markdown(f"""
+                                **Progreso de carga:**  
+                                • Lotes procesados: `{i+1}/{len(chunks)}`  
+                                • Registros insertados: `{registros_insertados}/{total_registros}`
+                            """)
+                        except Exception as e:
+                            print("❌ WebSocket posiblemente cerrado. No se puede actualizar UI:", e)
+
                 try:
                     conn.execute(text(f"ALTER TABLE {self.config['table_name']} ENABLE TRIGGER ALL"))
-                except:
-                    pass
-                    
-                    # Actualizar contadores
-                    registros_insertados += len(chunk)
-                    progress_bar.progress(progress)
+                except Exception as e:
+                    print("⚠️ No se pudieron reactivar los triggers:", e)
 
-            # Limpiar elementos de progreso
-            progress_bar.empty()
-            status_text.empty()
-            
+            # Limpiar elementos visuales
+            try:
+                progress_bar.empty()
+                status_text.empty()
+            except:
+                pass
+
             st.cache_data.clear()
 
             # Mostrar resumen final
-            st.success(f"**Carga exitosa:** {registros_insertados} registros nuevos insertados")
-            st.metric("Tiempo promedio", f"{len(chunks)/60:.2f} registros/segundo")
+            try:
+                st.success(f"✅ Carga exitosa: {registros_insertados} registros nuevos insertados")
+                st.metric("Velocidad estimada", f"{(registros_insertados / max(len(chunks), 1)):.2f} registros por lote")
+            except:
+                print("⚠️ WebSocket cerrado. No se puede mostrar resumen en UI.")
+
             return True
-            
+
         except Exception as e:
-            progress_bar.empty()
-            status_text.error(f"❌ Error en el lote {i+1}: {str(e)}")
-            st.error("Se ha realizado rollback de la transacción")
+            try:
+                progress_bar.empty()
+                status_text.error(f"❌ Error en la carga: {str(e)}")
+            except:
+                print("Error crítico durante la carga:", str(e))
             raise
 
 # ==============================================================================
@@ -276,7 +287,8 @@ class GestionesProcessor(DataProcessor):
                 'identificador_infraccion': 'identificador_infraccion',
                 'archivo_origen': 'archivo_origen',
                 'fecha_carga': 'fecha_carga',
-                'fecha_gestion_sencilla': 'fecha_gestion_sencilla'
+                'fecha_gestion_sencilla': 'fecha_gestion_sencilla',
+                'Tipo_Chat': 'tipo_chat'
             },
             'id_column': 'id_registro',
             'clean_function': preparar_datos

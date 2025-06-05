@@ -35,7 +35,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
             'Id Gestion Campaña', 'Tipo documento', 'Número documento', 'Nombre',
             'Fecha gestión', 'Tipo llamada', 'Código gestión', 'Resultado',
             'Fecha Compromiso', 'Funcionario', 'Campaña', 'Teléfono',
-            'Obligación', 'Nro. Comparendo', 'Valor'
+            'Obligación', 'Nro. Comparendo', 'Valor','Tipo_Chat'
         ]
         
         update_step("Validando estructura de hojas")
@@ -143,7 +143,8 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
             'Obligación': 'obligacion',
             'Nro. Comparendo': 'numero_comparendo',
             'Valor': 'valor',
-            'id registro': 'id_registro'
+            'id registro': 'id_registro',
+            'Tipo_Chat': 'tipo_chat'
         }
         df = df.rename(columns=mapeo_columnas)
 
@@ -192,7 +193,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
             'nombre_usuario', 'fecha_gestion', 'tipo_llamada', 'id_gestion',
             'resultado', 'fecha_compromiso', 'asesor', 'campana', 'telefono',
             'obligacion', 'numero_comparendo', 'valor', 'identificador_infraccion',
-            'archivo_origen', 'fecha_carga', 'fecha_gestion_sencilla'
+            'archivo_origen', 'fecha_carga', 'fecha_gestion_sencilla','tipo_chat'
         ]
         
         return (

@@ -296,7 +296,7 @@ def convert_decimals(data):
 # SIDEBAR MEJORADO PARA FILTROS
 # ==============================================================================
 with st.sidebar:
-    st.markdown("### 🎯 Validar Conexión")
+    st.markdown("## 🎯 Validar Conexión")
     
     # Test de conexión en el sidebar
     st.markdown("#### 🔌 Estado de Conexiones")
@@ -632,14 +632,15 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 result_sms = conn.execute(query_sms, params)
                 df_sms = pd.DataFrame(result_sms.fetchall(), columns=result_sms.keys())
             
-            # Datos de Andes-Wolkvox
+            # Datos de Andes-Wolkvox - CORRECCIÓN: Usar bloques separados
             with engine_andes.connect() as conn:
                 query_campanas = text("""
                     SELECT 
                         DATE(date) AS fecha,
-                        COUNT(DISTINCT telephone) AS contactos_predictivos
-                    FROM campanas_3
+                        COUNT(telephone) AS contactos_predictivos
+                    FROM tipificaciones_3
                     WHERE module = 'andes-movilidadtigo'
+                    AND type_interaction = 'out_pre'
                     AND date BETWEEN :fecha_inicio AND :fecha_fin
                     GROUP BY DATE(date)
                     ORDER BY fecha DESC
@@ -648,60 +649,169 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 result_campanas = conn.execute(query_campanas, params)
                 df_campanas = pd.DataFrame(result_campanas.fetchall(), columns=result_campanas.keys())
                 
-                # Otras consultas similares...
+                # CORRECCIÓN: Nueva consulta en el mismo bloque de conexión
+                query_no_conectadas = text("""
+                    SELECT 
+                        DATE(date) AS fecha,
+                        COUNT(telephone) AS contactos_no_conectadas
+                    FROM cdr_5
+                    WHERE module = 'andes-movilidadtigo'
+                    AND date BETWEEN :fecha_inicio AND :fecha_fin
+                    GROUP BY DATE(date)
+                    ORDER BY fecha DESC
+                """)
+                
+                result_no_conectadas = conn.execute(query_no_conectadas, params)
+                df_no_conectadas = pd.DataFrame(result_no_conectadas.fetchall(), columns=result_no_conectadas.keys())
+
+                query_manual = text("""
+                    SELECT 
+                        DATE(date) AS fecha,
+                        COUNT(telephone) AS contactos_manual
+                    FROM tipificaciones_3
+                    WHERE module = 'andes-movilidadtigo'
+                    AND type_interaction = 'outbound_ma'               
+                    AND date BETWEEN :fecha_inicio AND :fecha_fin
+                    GROUP BY DATE(date)
+                    ORDER BY fecha DESC
+                """)
+                
+                result_manual = conn.execute(query_manual, params)
+                df_manual = pd.DataFrame(result_manual.fetchall(), columns=result_manual.keys())
             
             # Consolidar datos
             df_final = pd.DataFrame()
+            
+            # CORRECCIÓN: Verificar si hay datos antes de procesar
+            dataframes_disponibles = []
+            
             if not df_gestiones.empty:
-                df_final = df_gestiones.copy()
+                dataframes_disponibles.append(df_gestiones)
+            if not df_sms.empty:
+                dataframes_disponibles.append(df_sms)
+            if not df_campanas.empty:
+                dataframes_disponibles.append(df_campanas)
+            if not df_no_conectadas.empty:
+                dataframes_disponibles.append(df_no_conectadas)
+            if not df_manual.empty:
+                dataframes_disponibles.append(df_manual)
+            
+            if dataframes_disponibles:
+                # Comenzar con el primer DataFrame disponible
+                df_final = dataframes_disponibles[0].copy()
                 
-                # Merge con otros DataFrames
-                for df in [df_sms, df_campanas]:
-                    if not df.empty:
-                        df_final = pd.merge(df_final, df, on='fecha', how='outer')
+                # Merge con el resto de DataFrames
+                for df in dataframes_disponibles[1:]:
+                    df_final = pd.merge(df_final, df, on='fecha', how='outer')
                 
                 # Limpiar datos
                 df_final = df_final.fillna(0)
                 numeric_cols = df_final.select_dtypes(include=[np.number]).columns
                 df_final[numeric_cols] = df_final[numeric_cols].astype(int)
                 df_final['fecha'] = pd.to_datetime(df_final['fecha'])
+                df_final = df_final.sort_values('fecha', ascending=False)
                 
-                # Dashboard de métricas
-                col1, col2, col3 = st.columns(3)
+                # CORRECCIÓN: Dashboard de métricas con 4 columnas
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    total_gestiones = df_final['gestiones_unicas'].sum()
-                    st.metric("📌 Gestiones Únicas", f"{total_gestiones:,}")
+                    if 'gestiones_unicas' in df_final.columns:
+                        total_gestiones = df_final['gestiones_unicas'].sum()
+                        st.metric("📌 Gestiones Únicas", f"{total_gestiones:,}")
+                    else:
+                        st.metric("📌 Gestiones Únicas", "N/A")
                 
                 with col2:
-                    total_documentos = df_final['documentos_unicos'].sum()
-                    st.metric("📄 Documentos Únicos", f"{total_documentos:,}")
+                    if 'documentos_unicos' in df_final.columns:
+                        total_documentos = df_final['documentos_unicos'].sum()
+                        st.metric("📄 Documentos Únicos", f"{total_documentos:,}")
+                    else:
+                        st.metric("📄 Documentos Únicos", "N/A")
                 
                 with col3:
                     if 'sms_enviados' in df_final.columns:
                         total_sms = df_final['sms_enviados'].sum()
                         st.metric("📱 SMS Enviados", f"{total_sms:,}")
+                    else:
+                        st.metric("📱 SMS Enviados", "N/A")
+                
+                with col4:
+                    if 'contactos_no_conectadas' in df_final.columns:
+                        total_no_conectadas = df_final['contactos_no_conectadas'].sum()
+                        st.metric("📞 No Conectadas", f"{total_no_conectadas:,}")
+                    else:
+                        st.metric("📞 No Conectadas", "N/A")
+                
+                # Agregar métrica de contactos predictivos si existe
+                if 'contactos_predictivos' in df_final.columns:
+                    col5, col6, col7, col8 = st.columns(4)
+
+                    with col5:
+                        total_predictivos = df_final['contactos_predictivos'].sum()
+                        st.metric("🎯 Contactos Predictivos", f"{total_predictivos:,}")
+                    with col6:
+                        if 'contactos_manual' in df_final.columns:
+                            total_manual = df_final['contactos_manual'].sum()
+                            st.metric(" Contactos Manual", f"{total_manual:,}")
+                        else:
+                            st.metric(" Contactos Manual", "N/A")
                 
                 # Gráfico principal
-                fig = px.line(
-                    df_final,
-                    x='fecha',
-                    y=[col for col in df_final.columns if col != 'fecha'],
-                    title="Evolución de Gestiones por Día",
-                    labels={'value': 'Cantidad', 'fecha': 'Fecha'},
-                    height=500
-                )
-                
-                fig.update_layout(
-                    hovermode='x unified',
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
+                columnas_disponibles = [col for col in df_final.columns if col != 'fecha']
+
+                if columnas_disponibles:
+                    # --- Widget para seleccionar columnas ---
+                    columnas_seleccionadas = st.multiselect(
+                        "Selecciona las métricas a visualizar:",
+                        options=columnas_disponibles,
+                        default=columnas_disponibles,  # Todas seleccionadas por defecto
+                        key="filtro_columnas_grafico"  # Opcional: evita conflictos con otros widgets
+                    )
+                    
+                    # --- Generar gráfico solo con las columnas seleccionadas ---
+                    if columnas_seleccionadas:  # Verificar que al menos una columna esté seleccionada
+                        fig = px.line(
+                            df_final,
+                            x='fecha',
+                            y=columnas_seleccionadas,  # ¡Aquí usamos las columnas filtradas!
+                            title="Evolución de Gestiones por Día",
+                            labels={'value': 'Cantidad', 'fecha': 'Fecha'},
+                            height=500
+                        )
+                        
+                        fig.update_layout(
+                            hovermode='x unified',
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("⚠️ Selecciona al menos una métrica para generar el gráfico.")
+                else:
+                    st.error("No hay datos disponibles para graficar.")
                 # Tabla de datos
                 st.subheader("📊 Detalle por Fecha")
-                st.dataframe(df_final, use_container_width=True, height=400)
+                
+                # Formatear columnas para mejor visualización
+                column_config = {
+                    "fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
+                }
+                
+                # Agregar configuración para columnas numéricas
+                for col in numeric_cols:
+                    if col in df_final.columns:
+                        column_config[col] = st.column_config.NumberColumn(
+                            col.replace('_', ' ').title(),
+                            format="%d"
+                        )
+                
+                st.dataframe(
+                    df_final, 
+                    use_container_width=True, 
+                    height=400,
+                    column_config=column_config,
+                    hide_index=True
+                )
                 
                 # Descarga
                 csv = df_final.to_csv(index=False, sep=';', encoding='utf-8-sig')
@@ -717,6 +827,10 @@ def analisis_gestiones_mejorado(fecha_inicio, fecha_fin):
                 
         except Exception as e:
             st.error(f"❌ Error en análisis de gestiones: {str(e)}")
+            # Agregar información de debug
+            st.error(f"Detalles del error: {type(e).__name__}")
+            import traceback
+            st.error(f"Traceback: {traceback.format_exc()}")
 
 # ==============================================================================
 # EJECUCIÓN PRINCIPAL
@@ -748,7 +862,7 @@ if hasattr(st.session_state, 'ejecutar_analisis') and st.session_state.ejecutar_
             analisis_gestiones_mejorado(fecha_inicio, fecha_fin)
     
     # Limpiar el estado
-    st.session_state.ejecutar_analisis = False
+    #st.session_state.ejecutar_analisis = False
 
 else:
     # Pantalla de información cuando no hay análisis ejecutándose
