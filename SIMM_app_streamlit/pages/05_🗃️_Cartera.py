@@ -1,11 +1,14 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from src.database.postgres import DatabaseManager
 from src.utils.fondo import set_background
 from sqlalchemy import text
 from calendar import monthrange
+import io
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
@@ -17,40 +20,174 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS
+# ==============================================================================
+# CONFIGURACIÓN DE ESTILOS MEJORADOS
+# ==============================================================================
 st.markdown("""
     <style>
+    /* Sidebar mejorado */
     [data-testid=stSidebar] {
-        background-color: #a5d6a7 !important;
+        background: #a5d6a7 !important;
+        padding: 20px 10px;
     }
+    
+    [data-testid=stSidebar] .sidebar-content {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    /* Contenedor principal */
     .main-container {
         padding: 2rem;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
     }
-    div[role=radiogroup] {
-        gap: 0.5rem;
+    
+    /* Tarjetas de métricas */
+    .metric-card {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+        margin: 10px 0;
+        transition: transform 0.3s ease;
     }
-    .sidebar .sidebar-title {
+    
+    .metric-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    /* Títulos mejorados */
+    .section-title {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 30px 0 20px 0;
+        text-align: center;
+    }
+    
+    .section-header {
+        color: #2e7d32;
+        border-bottom: 2px solid #a5d6a7;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Botones mejorados */
+    .stButton > button {
+        background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 12px 30px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+    
+    /* Alertas mejoradas */
+    .alert-success {
+        background: linear-gradient(135deg, #a8e6cf 0%, #7fcdcd 100%);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    .alert-warning {
+        background: linear-gradient(135deg, #ffd93d 0%, #ff6b6b 100%);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    /* Tabs mejorados */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 25px;
+        padding: 5px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        border-radius: 20px;
+        padding: 10px 20px;
+        font-weight: bold;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%);
+        color: white;
+    }
+    
+    /* Estilos para los filtros principales */
+    .main-filters {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 20px;
+        margin: 20px 0;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    /* Mejorar selectbox y inputs */
+    .stSelectbox > div > div > div {
+        background: white;
+        border-radius: 10px;
+    }
+    
+    .stDateInput > div > div > input {
+        background: white;
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+    }
+    
+    .stRadio > div {
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 10px;
+        padding: 10px;
+    }
+    
+    /* Mejorar checkboxes */
+    .stCheckbox {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 8px;
+        padding: 5px 10px;
+        margin: 5px 0;
+    }
+    
+    /* Estilos adicionales para mejor apariencia */
+    .stProgress > div > div > div > div {
+        background-color: #2e7d32;
+    }
+    
+    .stMarkdown {
+        margin-bottom: 2rem;
+    }
+    
+    /* Sidebar títulos */
+    .sidebar-title {
         color: #2c3e50;
         font-size: 1.2rem;
         margin-bottom: 1rem;
         font-weight: 600;
     }
+    
     .sidebar-instructions {
         color: #4a5568;
         font-size: 0.9rem;
         line-height: 1.5;
-    }
-    div[role=radiogroup] label:hover {
-        background-color: #e2e8f0 !important;
-    }
-    .stProgress > div > div > div > div {
-        background-color: #2e7d32;
-    }
-    .st-b7 {
-        background-color: #e8f5e9 !important;
-    }
-    .stMarkdown {
-        margin-bottom: 2rem;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -69,24 +206,100 @@ engine_simm = DatabaseManager.get_engine('SIMM')
 # ==============================================================================
 @st.cache_data(ttl=3600)
 def get_promesas(fecha_inicio, fecha_fin):
-    """Obtiene las promesas de pago en el rango de fechas especificado"""
+    """Obtiene las promesas de pago únicas en el rango de fechas especificado"""
     with engine_simm.connect() as conn:
         query = text("""
+        WITH promesas_unicas AS (
+            SELECT 
+                id_gestion,  -- Asumiendo que existe un campo identificador único
+                numero_comparendo,
+                asesor,
+                fecha_compromiso,
+                valor,
+                documento,
+                ROW_NUMBER() OVER (
+                    PARTITION BY documento, numero_comparendo 
+                    ORDER BY fecha_compromiso DESC
+                ) as rn
+            FROM gestiones
+            WHERE resultado IN ('Compromiso de acuerdo de pago', 'Compromiso de pago')
+            AND fecha_compromiso BETWEEN :fecha_inicio AND :fecha_fin
+        )
         SELECT 
             numero_comparendo,
             asesor,
             fecha_compromiso,
             valor,
             documento
-        FROM gestiones
-        WHERE resultado IN ('Compromiso de acuerdo de pago', 'Compromiso de pago')
-        AND fecha_compromiso BETWEEN :fecha_inicio AND :fecha_fin
-        ORDER BY fecha_compromiso, asesor
+        FROM promesas_unicas
+        WHERE rn = 1  -- Solo tomamos el registro más reciente por combinación documento/comparendo
+        ORDER BY fecha_compromiso DESC, asesor
         """)
         return pd.read_sql(query, conn, params={
             'fecha_inicio': fecha_inicio,
             'fecha_fin': fecha_fin
         })
+
+@st.cache_data(ttl=3600)
+def get_promesas_pendientes(fecha_inicio=None, fecha_fin=None):
+    """Obtiene las promesas de pago pendientes (vencidas y por vencer)"""
+    with engine_simm.connect() as conn:
+        # Si no se especifican fechas, usamos los últimos 30 días por defecto
+        fecha_filtro_inicio = "fecha_compromiso >= CURRENT_DATE - INTERVAL '30 days'"
+        params = {}
+        
+        if fecha_inicio and fecha_fin:
+            fecha_filtro_inicio = "fecha_compromiso BETWEEN :fecha_inicio AND :fecha_fin"
+            params = {
+                'fecha_inicio': fecha_inicio,
+                'fecha_fin': fecha_fin
+            }
+        elif fecha_inicio:
+            fecha_filtro_inicio = "fecha_compromiso >= :fecha_inicio"
+            params = {'fecha_inicio': fecha_inicio}
+        elif fecha_fin:
+            fecha_filtro_inicio = "fecha_compromiso <= :fecha_fin"
+            params = {'fecha_fin': fecha_fin}
+            
+        query = text(f"""
+        WITH promesas_unicas AS (
+            SELECT 
+                id_gestion,
+                numero_comparendo,
+                asesor,
+                fecha_compromiso,
+                valor,
+                documento,
+                ROW_NUMBER() OVER (
+                    PARTITION BY documento, numero_comparendo 
+                    ORDER BY fecha_compromiso DESC
+                ) as rn
+            FROM gestiones g
+            WHERE resultado IN ('Compromiso de acuerdo de pago', 'Compromiso de pago')
+            AND {fecha_filtro_inicio}
+            AND NOT EXISTS (
+                SELECT 1 FROM pagos p 
+                WHERE p.documento = g.documento
+                AND p.fecha_pago >= g.fecha_compromiso
+            )
+        )
+        SELECT 
+            numero_comparendo,
+            asesor,
+            fecha_compromiso,
+            valor,
+            documento,
+            CASE 
+                WHEN fecha_compromiso < CURRENT_DATE THEN 'Vencida'
+                WHEN fecha_compromiso = CURRENT_DATE THEN 'Vence Hoy'
+                ELSE 'Por Vencer'
+            END as estado,
+            CURRENT_DATE - fecha_compromiso as dias_vencido
+        FROM promesas_unicas
+        WHERE rn = 1
+        ORDER BY fecha_compromiso, asesor
+        """)
+        return pd.read_sql(query, conn, params=params)
 
 def procesar_datos(df):
     """Procesa los datos para el reporte"""
@@ -94,115 +307,495 @@ def procesar_datos(df):
     df['valor'] = pd.to_numeric(df['valor'])
     return df
 
-# ==============================================================================
-# INTERFAZ PRINCIPAL
-# ==============================================================================
-def main():
-    st.title("📋 Reporte de Promesas de Pago")
-    st.markdown("Visualización de compromisos de pago por asesor")
+def crear_grafico_barras(df, x_col, y_col, title, color_col=None):
+    """Crea un gráfico de barras con Plotly"""
+    if color_col:
+        fig = px.bar(df, x=x_col, y=y_col, color=color_col, title=title)
+    else:
+        fig = px.bar(df, x=x_col, y=y_col, title=title)
     
-    # 1. Filtros en pantalla principal
-    with st.container():
-        st.markdown('<div class="filter-container">', unsafe_allow_html=True)
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#2c3e50')
+    )
+    return fig
+
+def crear_grafico_lineas(df, x_col, y_col, title, group_col=None):
+    """Crea un gráfico de líneas con Plotly"""
+    if group_col:
+        fig = px.line(df, x=x_col, y=y_col, color=group_col, title=title, markers=True)
+    else:
+        fig = px.line(df, x=x_col, y=y_col, title=title, markers=True)
+    
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#2c3e50')
+    )
+    return fig
+
+# ==============================================================================
+# SECCIÓN REPORTE
+# ==============================================================================
+def mostrar_reporte():
+    st.markdown('<h2 class="section-header">📊 Reporte de Compromisos</h2>', unsafe_allow_html=True)
+    
+    # Obtener el rango de fechas real de los compromisos
+    with engine_simm.connect() as conn:
+        fecha_min_max = pd.read_sql(text("""
+            SELECT 
+                MIN(fecha_compromiso) as min_fecha,
+                MAX(fecha_compromiso) as max_fecha
+            FROM gestiones
+            WHERE resultado IN ('Compromiso de acuerdo de pago', 'Compromiso de pago')
+        """), conn)
+
+    hoy = date.today()
+    fecha_fin_default = fecha_min_max['max_fecha'].iloc[0]  # Eliminar .date() aquí
+
+    # Filtros de fecha con estilo mejorado
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fecha_inicio = st.date_input(
+            "📅 Fecha inicial:",
+            value=hoy,
+            disabled=False
+        )
+
+    with col2:
+        fecha_fin = st.date_input(
+            "📅 Fecha final:",
+            value=fecha_fin_default,
+            min_value=hoy,
+            max_value=fecha_fin_default
+        )
+
+    # Validación de fechas
+    if fecha_inicio > fecha_fin:
+        st.error("La fecha inicial no puede ser mayor a la fecha final")
+        st.stop()
+
+    # Carga de datos con las fechas seleccionadas
+    with st.spinner("Cargando datos..."):
+        df_compromisos = get_promesas(fecha_inicio, fecha_fin)
+        df_pendientes = get_promesas_pendientes(fecha_inicio, fecha_fin)
         
-        # Selección de rango de fechas completo
-        hoy = date.today()
-        fecha_inicio_default = date(hoy.year, hoy.month, 1)
+        if df_compromisos.empty and df_pendientes.empty:
+            st.warning("No se encontraron compromisos pendientes desde hoy hasta la fecha seleccionada")
+            return
+        
+        if not df_compromisos.empty:
+            df_compromisos = procesar_datos(df_compromisos)
+        
+        if not df_pendientes.empty:
+            df_pendientes = procesar_datos(df_pendientes)
+    
+    # COMPROMISOS PENDIENTES
+    if not df_pendientes.empty:
+        st.markdown('<h3 class="section-header">🔴 Compromisos Pendientes</h3>', unsafe_allow_html=True)
+        
+        # Métricas de pendientes con estilo mejorado
+        
+        col1, col2, col3, col4 = st.columns(4)
+        vencidas = df_pendientes[df_pendientes['estado'] == 'Vencida']
+        vence_hoy = df_pendientes[df_pendientes['estado'] == 'Vence Hoy']
+        por_vencer = df_pendientes[df_pendientes['estado'] == 'Por Vencer']
+        
+        col1.metric("📋 Total Pendientes", len(df_pendientes), f"${df_pendientes['valor'].sum():,.0f}")
+        col2.metric("🔴 Vencidas", len(vencidas), f"${vencidas['valor'].sum():,.0f}" if not vencidas.empty else "$0")
+        col3.metric("⚠️ Vencen Hoy", len(vence_hoy), f"${vence_hoy['valor'].sum():,.0f}" if not vence_hoy.empty else "$0")
+        col4.metric("🟢 Por Vencer", len(por_vencer), f"${por_vencer['valor'].sum():,.0f}" if not por_vencer.empty else "$0")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Análisis por asesor de pendientes
+        pendientes_asesor = df_pendientes.groupby(['asesor', 'estado']).agg({
+            'numero_comparendo': 'count',
+            'valor': 'sum'
+        }).reset_index()
+        
+        if not pendientes_asesor.empty:
+            fig_pendientes = px.bar(
+                pendientes_asesor, 
+                x='asesor', 
+                y='valor', 
+                color='estado',
+                title='Valor de Compromisos Pendientes por Asesor y Estado',
+                color_discrete_map={
+                    'Vencida': '#dc3545',
+                    'Vence Hoy': '#ffc107', 
+                    'Por Vencer': '#28a745'
+                }
+            )
+            fig_pendientes.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#2c3e50')
+            )
+            st.plotly_chart(fig_pendientes, use_container_width=True)
+        
+        # Tabla detallada de pendientes
+        st.subheader("Detalle de Compromisos Pendientes")
+        st.dataframe(
+            df_pendientes.sort_values(['estado', 'fecha_compromiso']),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "valor": st.column_config.NumberColumn(format="$%,.0f"),
+                "fecha_compromiso": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                "estado": st.column_config.TextColumn()
+            }
+        )
+    
+    # ANÁLISIS DE COMPROMISOS DEL PERÍODO
+    if not df_compromisos.empty:
+        st.markdown('<h3 class="section-header">📈 Análisis del Período Seleccionado</h3>', unsafe_allow_html=True)
+        
+        # Métricas generales con estilo mejorado
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📊 Total Compromisos", len(df_compromisos))
+        col2.metric("💰 Valor Total", f"${df_compromisos['valor'].sum():,.0f}")
+        col3.metric("📈 Valor Promedio", f"${df_compromisos['valor'].mean():,.0f}")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Análisis por día
+        st.subheader("📅 Análisis por Día")
+        analisis_dia = df_compromisos.groupby('fecha_compromiso').agg({
+            'numero_comparendo': 'count',
+            'valor': ['sum', 'mean']
+        }).round(0)
+        analisis_dia.columns = ['Cantidad', 'Valor Total', 'Valor Promedio']
+        analisis_dia = analisis_dia.sort_index(ascending=False)
+        
+        # Gráfico de evolución diaria
+        analisis_dia_reset = analisis_dia.reset_index()
+        fig_dia = crear_grafico_lineas(
+            analisis_dia_reset, 
+            'fecha_compromiso', 
+            'Valor Total',
+            'Evolución Diaria del Valor de Compromisos'
+        )
+        st.plotly_chart(fig_dia, use_container_width=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            fecha_inicio = st.date_input(
-                "Fecha inicial:",
-                value=fecha_inicio_default,
-                min_value=date(2023, 1, 1),
-                max_value=hoy
+            st.dataframe(
+                analisis_dia,
+                use_container_width=True,
+                column_config={
+                    "Valor Total": st.column_config.NumberColumn(format="$%,.0f"),
+                    "Valor Promedio": st.column_config.NumberColumn(format="$%,.0f")
+                }
             )
+        
+        # Análisis por asesor
+        st.subheader("👤 Análisis por Asesor")
+        analisis_asesor = df_compromisos.groupby('asesor').agg({
+            'numero_comparendo': 'count',
+            'valor': ['sum', 'mean']
+        }).round(0)
+        analisis_asesor.columns = ['Cantidad', 'Valor Total', 'Valor Promedio']
+        analisis_asesor = analisis_asesor.sort_values('Valor Total', ascending=False)
+        
+        # Gráfico por asesor
+        analisis_asesor_reset = analisis_asesor.reset_index()
+        fig_asesor = crear_grafico_barras(
+            analisis_asesor_reset,
+            'asesor',
+            'Valor Total',
+            'Valor Total de Compromisos por Asesor'
+        )
+        st.plotly_chart(fig_asesor, use_container_width=True)
+        
         with col2:
-            fecha_fin = st.date_input(
-                "Fecha final:",
-                value=hoy,
-                min_value=date(2023, 1, 1),
-                max_value=hoy
+            st.dataframe(
+                analisis_asesor,
+                use_container_width=True,
+                column_config={
+                    "Valor Total": st.column_config.NumberColumn(format="$%,.0f"),
+                    "Valor Promedio": st.column_config.NumberColumn(format="$%,.0f")
+                }
             )
         
-        # Validación de fechas
-        if fecha_inicio > fecha_fin:
-            st.error("La fecha inicial no puede ser mayor a la fecha final")
-            return
+        # Análisis por comparendo (top 10)
+        st.subheader("🏆 Top 10 Comparendos por Valor")
+        top_comparendos = df_compromisos.nlargest(10, 'valor')[['numero_comparendo', 'asesor', 'fecha_compromiso', 'valor', 'documento']]
+        st.dataframe(
+            top_comparendos,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "valor": st.column_config.NumberColumn(format="$%,.0f"),
+                "fecha_compromiso": st.column_config.DateColumn(format="DD/MM/YYYY")
+            }
+        )
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Matriz de correlación día-asesor
+        st.subheader("📊 Matriz Día-Asesor")
+        matriz_dia_asesor = df_compromisos.groupby(['fecha_compromiso', 'asesor'])['valor'].sum().unstack(fill_value=0)
+        
+        if not matriz_dia_asesor.empty:
+            fig_heatmap = px.imshow(
+                matriz_dia_asesor.values,
+                x=matriz_dia_asesor.columns,
+                y=[str(fecha) for fecha in matriz_dia_asesor.index],
+                aspect="auto",
+                title="Mapa de Calor: Valor de Compromisos por Día y Asesor"
+            )
+            fig_heatmap.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#2c3e50')
+            )
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+
+# ==============================================================================
+# SECCIÓN DESCARGA
+# ==============================================================================
+def mostrar_descarga():
+    st.markdown('<h2 class="section-header">📥 Generador de Descargas</h2>', unsafe_allow_html=True)
     
-    # 2. Carga y procesamiento de datos
-    with st.spinner(f"Cargando datos del {fecha_inicio} al {fecha_fin}..."):
+    # Filtros de fecha con estilo mejorado
+    
+    col1, col2 = st.columns(2)
+    hoy = date.today()
+    fecha_inicio_default = date(hoy.year, hoy.month, 1)
+    
+    with col1:
+        fecha_inicio = st.date_input(
+            "📅 Fecha inicial:",
+            value=fecha_inicio_default,
+            min_value=date(2023, 1, 1),
+            max_value=hoy,
+            key="desc_fecha_inicio"
+        )
+    with col2:
+        fecha_fin = st.date_input(
+            "📅 Fecha final:",
+            value=hoy,
+            min_value=date(2023, 1, 1),
+            max_value=hoy,
+            key="desc_fecha_fin"
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if fecha_inicio > fecha_fin:
+        st.error("La fecha inicial no puede ser mayor a la fecha final")
+        return
+    
+    # Carga de datos
+    with st.spinner("Cargando datos..."):
         df = get_promesas(fecha_inicio, fecha_fin)
         
         if df.empty:
-            st.warning("No se encontraron promesas de pago en el rango de fechas seleccionado")
+            st.warning("No se encontraron datos en el período seleccionado")
             return
         
         df = procesar_datos(df)
+    
+    # Configuración de descarga con estilo mejorado
+    
+    st.subheader("⚙️ Configurar Descarga")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Selección de campos
+        campos_disponibles = {
+            'fecha_compromiso': 'Fecha Compromiso',
+            'asesor': 'Asesor',
+            'numero_comparendo': 'Número Comparendo',
+            'documento': 'Documento',
+            'valor': 'Valor'
+        }
         
-        # Filtro por asesor
-        asesores = sorted(df['asesor'].unique())
-        asesor_seleccionado = st.selectbox(
-            "Filtrar por asesor:",
-            options=["Todos"] + asesores,
+        campos_seleccionados = st.multiselect(
+            "📋 Seleccionar campos a incluir:",
+            options=list(campos_disponibles.keys()),
+            default=['fecha_compromiso', 'asesor', 'numero_comparendo', 'valor'],
+            format_func=lambda x: campos_disponibles[x]
+        )
+    
+    with col2:
+        # Opciones de agrupación
+        tipo_reporte = st.radio(
+            "📊 Tipo de reporte:",
+            options=['Detallado', 'Agrupado por Asesor', 'Agrupado por Día', 'Agrupado por Asesor y Día'],
             index=0
         )
         
-        if asesor_seleccionado != "Todos":
-            df = df[df['asesor'] == asesor_seleccionado]
+        # Filtro por asesor
+        asesores = ['Todos'] + sorted(df['asesor'].unique().tolist())
+        asesor_filtro = st.selectbox(
+            "👤 Filtrar por asesor:",
+            options=asesores,
+            index=0
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    # 3. Visualización de resultados
-    st.header(f"Resumen de Promesas ({fecha_inicio} a {fecha_fin})")
+    # Aplicar filtros
+    df_filtrado = df.copy()
+    if asesor_filtro != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['asesor'] == asesor_filtro]
     
-    # Métricas clave
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Promesas", len(df))
-    col2.metric("Monto Total", f"${df['valor'].sum():,.0f}")
-    col3.metric("Asesores", df['asesor'].nunique())
+    # Generar DataFrame según el tipo de reporte
+    if tipo_reporte == 'Detallado':
+        df_descarga = df_filtrado[campos_seleccionados].copy()
+        
+    elif tipo_reporte == 'Agrupado por Asesor':
+        # Agrupar por asesor manteniendo algunos campos relevantes
+        df_descarga = df_filtrado.groupby('asesor').agg({
+            'numero_comparendo': 'count',
+            'valor': 'sum',
+            'documento': lambda x: ', '.join(x.unique()[:5]) + ('...' if len(x.unique()) > 5 else '')  # Primeros 5 documentos
+        }).rename(columns={
+            'numero_comparendo': 'Cantidad_Promesas',
+            'valor': 'Valor_Total',
+            'documento': 'Documentos_Muestra'
+        }).reset_index()
+        
+    elif tipo_reporte == 'Agrupado por Día':
+        # Agrupar por día manteniendo información de documentos
+        df_descarga = df_filtrado.groupby('fecha_compromiso').agg({
+            'numero_comparendo': 'count',
+            'valor': 'sum',
+            'asesor': 'nunique',
+            'documento': lambda x: ', '.join(x.unique()[:5]) + ('...' if len(x.unique()) > 5 else '')  # Primeros 5 documentos
+        }).rename(columns={
+            'numero_comparendo': 'Cantidad_Promesas',
+            'valor': 'Valor_Total',
+            'asesor': 'Cantidad_Asesores',
+            'documento': 'Documentos_Muestra'
+        }).reset_index()
+        
+    else:  # Agrupado por Asesor y Día
+        # Agrupar por asesor y día manteniendo información de documentos
+        df_descarga = df_filtrado.groupby(['fecha_compromiso', 'asesor']).agg({
+            'numero_comparendo': 'count',
+            'valor': 'sum',
+            'documento': lambda x: ', '.join(x.unique()[:3]) + ('...' if len(x.unique()) > 3 else '')  # Primeros 3 documentos
+        }).rename(columns={
+            'numero_comparendo': 'Cantidad_Promesas',
+            'valor': 'Valor_Total',
+            'documento': 'Documentos_Muestra'
+        }).reset_index()
     
-    # Agrupación por día y asesor
-    st.subheader("Detalle por Día")
-    df_dia_asesor = df.groupby(['fecha_compromiso', 'asesor']).agg({
-        'numero_comparendo': 'count',
-        'valor': 'sum'
-    }).rename(columns={
-        'numero_comparendo': 'Cantidad',
-        'valor': 'Total'
-    }).sort_values('fecha_compromiso', ascending=False)
+    # Vista previa en tiempo real con estilo mejorado
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.subheader("👀 Vista Previa del Archivo")
+    st.write(f"**📊 Registros a descargar:** {len(df_descarga)}")
     
+    # Mostrar métricas de la vista previa
+    if 'Valor_Total' in df_descarga.columns:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📋 Total Registros", len(df_descarga))
+        col2.metric("💰 Valor Total", f"${df_descarga['Valor_Total'].sum():,.0f}")
+        col3.metric("📈 Valor Promedio", f"${df_descarga['Valor_Total'].mean():,.0f}")
+    elif 'valor' in df_descarga.columns:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📋 Total Registros", len(df_descarga))
+        col2.metric("💰 Valor Total", f"${df_descarga['valor'].sum():,.0f}")
+        col3.metric("📈 Valor Promedio", f"${df_descarga['valor'].mean():,.0f}")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Mostrar tabla de vista previa
     st.dataframe(
-        df_dia_asesor,
-        use_container_width=True,
-        column_config={
-            "Total": st.column_config.NumberColumn(format="$%,.0f")
-        }
-    )
-    
-    # Detalle completo
-    st.subheader("Detalle Completo de Promesas")
-    st.dataframe(
-        df[['fecha_compromiso', 'asesor', 'numero_comparendo', 'documento', 'valor']],
+        df_descarga.head(20),
         use_container_width=True,
         hide_index=True,
         column_config={
             "valor": st.column_config.NumberColumn(format="$%,.0f"),
+            "Valor_Total": st.column_config.NumberColumn(format="$%,.0f"),
             "fecha_compromiso": st.column_config.DateColumn(format="DD/MM/YYYY")
         }
     )
     
-    # Opción para descargar
-    csv = df[['fecha_compromiso', 'asesor', 'numero_comparendo', 'documento', 'valor']]\
-        .to_csv(index=False).encode('utf-8')
+    if len(df_descarga) > 20:
+        st.info(f"Mostrando los primeros 20 registros de {len(df_descarga)} totales")
     
-    st.download_button(
-        label="Descargar Reporte Completo (CSV)",
-        data=csv,
-        file_name=f"reporte_promesas_{fecha_inicio}_a_{fecha_fin}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+    # Botón de descarga
+    if not df_descarga.empty:
+        # Convertir a Excel
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_descarga.to_excel(writer, sheet_name='Reporte_Compromisos', index=False)
+            
+            # Formatear el archivo Excel
+            workbook = writer.book
+            worksheet = writer.sheets['Reporte_Compromisos']
+            
+            # Formato para moneda
+            money_format = workbook.add_format({'num_format': '$#,##0'})
+            date_format = workbook.add_format({'num_format': 'dd/mm/yyyy'})
+            
+            # Aplicar formatos
+            for idx, col in enumerate(df_descarga.columns):
+                if 'valor' in col.lower() or 'total' in col.lower():
+                    worksheet.set_column(idx, idx, 15, money_format)
+                elif 'fecha' in col.lower():
+                    worksheet.set_column(idx, idx, 12, date_format)
+                else:
+                    worksheet.set_column(idx, idx, 15)
+        
+        processed_data = output.getvalue()
+        
+        nombre_archivo = f"reporte_compromisos_{tipo_reporte.lower().replace(' ', '_')}_{fecha_inicio}_a_{fecha_fin}.xlsx"
+        
+        st.download_button(
+            label="📥 Descargar Reporte en Excel",
+            data=processed_data,
+            file_name=nombre_archivo,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            type="primary"
+        )
+
+# ==============================================================================
+# INTERFAZ PRINCIPAL
+# ==============================================================================
+def main():
+    st.title("💼 Análisis de Cartera")
+    
+    # Sidebar para navegación
+    with st.sidebar:
+        
+        # Inicializar el estado de sesión si no existe
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = "📊 Reporte"
+        
+        # Botón para Reporte
+        if st.button("📊 Reporte", 
+                    use_container_width=True,
+                    type="primary" if st.session_state.current_page == "📊 Reporte" else "secondary"):
+            st.session_state.current_page = "📊 Reporte"
+        
+        # Botón para Descarga
+        if st.button("📥 Descarga", 
+                    use_container_width=True,
+                    type="primary" if st.session_state.current_page == "📥 Descarga" else "secondary"):
+            st.session_state.current_page = "📥 Descarga"
+        
+        st.markdown("---")
+        st.markdown("""
+        <div class="sidebar-instructions">
+        <strong>📊 Reporte:</strong><br>
+        - Compromisos pendientes<br>
+        - Análisis por día/asesor<br>
+        - Gráficos interactivos<br><br>
+        
+        <strong>📥 Descarga:</strong><br>
+        - Configurar campos<br>
+        - Vista previa en tiempo real<br>
+        - Descarga en Excel
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar la sección correspondiente
+    if st.session_state.current_page == "📊 Reporte":
+        mostrar_reporte()
+    else:
+        mostrar_descarga()
 
 if __name__ == "__main__":
     main()

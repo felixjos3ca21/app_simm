@@ -35,7 +35,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
             'Id Gestion Campaña', 'Tipo documento', 'Número documento', 'Nombre',
             'Fecha gestión', 'Tipo llamada', 'Código gestión', 'Resultado',
             'Fecha Compromiso', 'Funcionario', 'Campaña', 'Teléfono',
-            'Obligación', 'Nro. Comparendo', 'Valor','Tipo_Chat'
+            'Obligación', 'Nro. Comparendo', 'Valor','Tipo Chat'
         ]
         
         update_step("Validando estructura de hojas")
@@ -124,7 +124,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         df.drop('contador_grupo', axis=1, inplace=True)
 
         # =============================================================================
-        # 9. Normalización de nombres de columnas (ANTES de validaciones)
+        # 9. Normalización de nombres de columnas 
         # =============================================================================
         update_step("Normalizando nombres de columnas")
         mapeo_columnas = {
@@ -144,7 +144,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
             'Nro. Comparendo': 'numero_comparendo',
             'Valor': 'valor',
             'id registro': 'id_registro',
-            'Tipo_Chat': 'tipo_chat'
+            'Tipo Chat': 'tipo_chat'
         }
         df = df.rename(columns=mapeo_columnas)
 
