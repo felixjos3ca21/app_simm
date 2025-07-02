@@ -263,6 +263,11 @@ def mostrar_vista_cruce():
 # ==============================================
 # Logica para el status de bases
 # ==============================================
+
+
+
+
+
 def mostrar_status_bases():
     st.header("📊 Status de Bases vs Gestiones")
 
@@ -280,235 +285,230 @@ def mostrar_status_bases():
     bases_disponibles = df_bases[df_bases['fecha_entrega'] == fecha_seleccionada]['base'].unique()
     base_seleccionada = st.selectbox("📂 Seleccionar base", bases_disponibles)
 
-    # 3. Filtrar documentos de la base seleccionada
+    # 3. Filtrar documentos de la base seleccionada (esto es liviano, lo mantenemos)
     df_base_filtrada = df_bases[
         (df_bases['fecha_entrega'] == fecha_seleccionada) &
         (df_bases['base'] == base_seleccionada)
     ].drop_duplicates(subset='documento')
 
-    # 4. Determinar rango de fechas según lógica solicitada
+    # 4. Determinar rango de fechas (también liviano)
     fecha_actual = datetime.now().date()
     fecha_seleccionada_dt = pd.to_datetime(fecha_seleccionada)
     
     if fecha_actual.day <= 7:
-        # Primeros 7 días del mes: 
-        # 1) últimos 7 días del mes anterior
         ultimo_dia_mes_anterior = fecha_seleccionada_dt.replace(day=1) - pd.Timedelta(days=1)
         fecha_inicio = ultimo_dia_mes_anterior - pd.Timedelta(days=6)
-        
-        # 2) + días transcurridos del mes actual
         fecha_fin = fecha_seleccionada_dt.replace(day=fecha_actual.day)
     else:
-        # Resto del mes: buscar todo el mes actual
         fecha_inicio = fecha_seleccionada_dt.replace(day=1)
         fecha_fin = fecha_seleccionada_dt
     
     st.info(f"🔍 Rango de búsqueda: {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}")
 
-    # 5. Consulta para obtener gestiones con jerarquía y conteo
-    documentos = df_base_filtrada['documento'].tolist()
-    fecha_fin_ajustada = fecha_fin + pd.Timedelta(hours=23, minutes=59, seconds=59)
+    # ===== NUEVO BOTÓN DE BÚSQUEDA =====
+    if st.button("🔍 Ejecutar Búsqueda", type="primary"):
+        with st.spinner("Buscando datos..."):
+            # 5. Consultas pesadas (solo se ejecutan al hacer clic)
+            documentos = df_base_filtrada['documento'].tolist()
+            fecha_fin_ajustada = fecha_fin + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
-    query_gestiones = """
-        WITH jerarquia(resultado, prioridad) AS (
-            VALUES 
-                ('Paz Y Salvo', 1),
-                ('Compromiso de pago', 2),
-                ('Compromiso de acuerdo de pago', 3),
-                ('Caso Especial', 4),
-                ('No Define Fecha De Pago', 5),
-                ('Sin voluntad de pago', 6),
-                ('Mensaje con terceros', 7),
-                ('Mensaje', 8),
-                ('Volver a llamar', 9),
-                ('Entrega Comunicado', 10),
-                ('Localizado', 12),
-                ('Envio De E-Mail', 13),
-                ('No localizado', 14),
-                ('Fallecido', 15),
-                ('Nuevos Datos', 16),
-                ('Nro. inhabilitado', 17),
-                ('Equivocado', 18),
-                ('No contestan', 19),
-                ('Conmutador', 20),
-                ('Ocupado', 21),
-                ('Otros', 22)
-        ),
-        gestiones_filtradas AS (
-            SELECT 
-                g.documento,
-                g.resultado,
-                g.asesor,
-                g.fecha_gestion,
-                g.id_gestion,
-                COALESCE(j.prioridad, 22) as prioridad
-            FROM gestiones g
-            LEFT JOIN jerarquia j ON g.resultado = j.resultado
-            WHERE g.documento = ANY(%s)
-            AND g.fecha_gestion BETWEEN %s AND %s
-        ),
-        conteo_gestiones AS (
-            SELECT 
-                documento,
-                COUNT(DISTINCT id_gestion) as total_gestiones
-            FROM gestiones_filtradas
-            GROUP BY documento
-        ),
-        ultimas_gestiones AS (
-            SELECT 
-                documento,
-                resultado,
-                asesor,
-                fecha_gestion,
-                ROW_NUMBER() OVER (PARTITION BY documento ORDER BY fecha_gestion DESC) as rn_ultima
-            FROM gestiones_filtradas
-        ),
-        gestiones_positivas AS (
-            SELECT 
-                documento,
-                resultado,
-                asesor,
-                fecha_gestion,
-                ROW_NUMBER() OVER (PARTITION BY documento ORDER BY prioridad ASC, fecha_gestion DESC) as rn_positiva
-            FROM gestiones_filtradas
-        )
-        SELECT 
-            u.documento,
-            u.resultado as ultimo_resultado,
-            u.asesor as asesor_ultimo,
-            u.fecha_gestion as fecha_ultima_gestion,
-            p.resultado as resultado_positivo,
-            p.asesor as asesor_positivo,
-            p.fecha_gestion as fecha_gestion_positiva,
-            c.total_gestiones
-        FROM ultimas_gestiones u
-        LEFT JOIN gestiones_positivas p ON u.documento = p.documento AND p.rn_positiva = 1
-        LEFT JOIN conteo_gestiones c ON u.documento = c.documento
-        WHERE u.rn_ultima = 1
-    """
+            query_gestiones = """
+                WITH jerarquia(resultado, prioridad) AS (
+                    VALUES 
+                        ('Paz Y Salvo', 1),
+                        ('Compromiso de pago', 2),
+                        ('Compromiso de acuerdo de pago', 3),
+                        ('Caso Especial', 4),
+                        ('No Define Fecha De Pago', 5),
+                        ('Sin voluntad de pago', 6),
+                        ('Mensaje con terceros', 7),
+                        ('Mensaje', 8),
+                        ('Volver a llamar', 9),
+                        ('Entrega Comunicado', 10),
+                        ('Localizado', 12),
+                        ('Envio De E-Mail', 13),
+                        ('No localizado', 14),
+                        ('Fallecido', 15),
+                        ('Nuevos Datos', 16),
+                        ('Nro. inhabilitado', 17),
+                        ('Equivocado', 18),
+                        ('No contestan', 19),
+                        ('Conmutador', 20),
+                        ('Ocupado', 21),
+                        ('Otros', 22)
+                ),
+                gestiones_filtradas AS (
+                    SELECT 
+                        g.documento,
+                        g.resultado,
+                        g.asesor,
+                        g.fecha_gestion,
+                        g.id_gestion,
+                        COALESCE(j.prioridad, 22) as prioridad
+                    FROM gestiones g
+                    LEFT JOIN jerarquia j ON g.resultado = j.resultado
+                    WHERE g.documento = ANY(%s)
+                    AND g.fecha_gestion BETWEEN %s AND %s
+                ),
+                conteo_gestiones AS (
+                    SELECT 
+                        documento,
+                        COUNT(DISTINCT id_gestion) as total_gestiones
+                    FROM gestiones_filtradas
+                    GROUP BY documento
+                ),
+                ultimas_gestiones AS (
+                    SELECT 
+                        documento,
+                        resultado,
+                        asesor,
+                        fecha_gestion,
+                        ROW_NUMBER() OVER (PARTITION BY documento ORDER BY fecha_gestion DESC) as rn_ultima
+                    FROM gestiones_filtradas
+                ),
+                gestiones_positivas AS (
+                    SELECT 
+                        documento,
+                        resultado,
+                        asesor,
+                        fecha_gestion,
+                        ROW_NUMBER() OVER (PARTITION BY documento ORDER BY prioridad ASC, fecha_gestion DESC) as rn_positiva
+                    FROM gestiones_filtradas
+                )
+                SELECT 
+                    u.documento,
+                    u.resultado as ultimo_resultado,
+                    u.asesor as asesor_ultimo,
+                    u.fecha_gestion as fecha_ultima_gestion,
+                    p.resultado as resultado_positivo,
+                    p.asesor as asesor_positivo,
+                    p.fecha_gestion as fecha_gestion_positiva,
+                    c.total_gestiones
+                FROM ultimas_gestiones u
+                LEFT JOIN gestiones_positivas p ON u.documento = p.documento AND p.rn_positiva = 1
+                LEFT JOIN conteo_gestiones c ON u.documento = c.documento
+                WHERE u.rn_ultima = 1
+            """
 
-    # Consulta para obtener SMS
-    query_sms = """
-        SELECT 
-            documento,
-            COUNT(telefono) as total_sms
-        FROM sms
-        WHERE documento = ANY(%s)
-        AND fecha_sms BETWEEN %s AND %s
-        GROUP BY documento
-    """
+            query_sms = """
+                SELECT 
+                    documento,
+                    COUNT(telefono) as total_sms
+                FROM sms
+                WHERE documento = ANY(%s)
+                AND fecha_sms BETWEEN %s AND %s
+                GROUP BY documento
+            """
 
-    # Ejecutar consultas
-    df_gestiones = pd.read_sql(query_gestiones, conn, 
-                             params=(documentos, fecha_inicio, fecha_fin_ajustada))
-    df_gestiones['documento'] = df_gestiones['documento'].astype(str).str.strip().str.upper()
+            # Ejecutar consultas
+            df_gestiones = pd.read_sql(query_gestiones, conn, 
+                                     params=(documentos, fecha_inicio, fecha_fin_ajustada))
+            df_gestiones['documento'] = df_gestiones['documento'].astype(str).str.strip().str.upper()
 
-    df_sms = pd.read_sql(query_sms, conn,
-                        params=(documentos, fecha_inicio, fecha_fin_ajustada))
-    df_sms['documento'] = df_sms['documento'].astype(str).str.strip().str.upper()
+            df_sms = pd.read_sql(query_sms, conn,
+                              params=(documentos, fecha_inicio, fecha_fin_ajustada))
+            df_sms['documento'] = df_sms['documento'].astype(str).str.strip().str.upper()
 
-    # 6. Unir todos los datos
-    df_resultado = df_base_filtrada.merge(
-        df_gestiones,
-        on='documento',
-        how='left'
-    ).merge(
-        df_sms,
-        on='documento',
-        how='left'
-    ).fillna({
-        'ultimo_resultado': 'Sin gestión',
-        'asesor_ultimo': 'N/A',
-        'fecha_ultima_gestion': pd.NaT,
-        'resultado_positivo': 'Sin gestión',
-        'asesor_positivo': 'N/A',
-        'fecha_gestion_positiva': pd.NaT,
-        'total_gestiones': 0,
-        'total_sms': 0
-    })
+            # 6. Unir todos los datos
+            df_resultado = df_base_filtrada.merge(
+                df_gestiones,
+                on='documento',
+                how='left'
+            ).merge(
+                df_sms,
+                on='documento',
+                how='left'
+            ).fillna({
+                'ultimo_resultado': 'Sin gestión',
+                'asesor_ultimo': 'N/A',
+                'fecha_ultima_gestion': pd.NaT,
+                'resultado_positivo': 'Sin gestión',
+                'asesor_positivo': 'N/A',
+                'fecha_gestion_positiva': pd.NaT,
+                'total_gestiones': 0,
+                'total_sms': 0
+            })
 
-    # 7. Ordenar columnas y datos
-    column_order = [
-        'documento', 'base', 'fecha_entrega',
-        'resultado_positivo', 'asesor_positivo', 'fecha_gestion_positiva',
-        'ultimo_resultado', 'asesor_ultimo', 'fecha_ultima_gestion',
-        'total_gestiones', 'total_sms'
-    ]
-    df_resultado = df_resultado[column_order]
+            # 7. Ordenar columnas y datos
+            column_order = [
+                'documento', 'base', 'fecha_entrega',
+                'resultado_positivo', 'asesor_positivo', 'fecha_gestion_positiva',
+                'ultimo_resultado', 'asesor_ultimo', 'fecha_ultima_gestion',
+                'total_gestiones', 'total_sms'
+            ]
+            df_resultado = df_resultado[column_order]
 
-    # ===== NUEVA SECCIÓN DE ESTADÍSTICAS =====
-    st.subheader(f"📌 Estadísticas de la Base '{base_seleccionada}'")
-    
-    # Calcular métricas clave
-    n_documentos = len(df_resultado)
-    n_con_gestion = len(df_resultado[df_resultado['ultimo_resultado'] != 'Sin gestión'])
-    docs_sin_gestion = n_documentos - n_con_gestion
-    total_gestiones = df_resultado['total_gestiones'].sum()
-    total_sms = df_resultado['total_sms'].sum()
-    
-    # Contar compromisos de pago
-    compromisos = len(df_resultado[
-        df_resultado['resultado_positivo'].isin(['Compromiso de pago', 'Compromiso de acuerdo de pago'])
-    ])
-    
-    # Contar asesores únicos (combinando ambos tipos de gestiones)
-    asesores_unicos = set()
-    asesores_unicos.update(df_resultado['asesor_positivo'].unique())
-    asesores_unicos.update(df_resultado['asesor_ultimo'].unique())
-    asesores_unicos.discard('N/A')
-    n_asesores = len(asesores_unicos)
+            # ===== SECCIÓN DE ESTADÍSTICAS =====
+            st.subheader(f"📌 Estadísticas de la Base '{base_seleccionada}'")
+            
+            # Calcular métricas clave
+            n_documentos = len(df_resultado)
+            n_con_gestion = len(df_resultado[df_resultado['ultimo_resultado'] != 'Sin gestión'])
+            docs_sin_gestion = n_documentos - n_con_gestion
+            total_gestiones = int(df_resultado['total_gestiones'].sum())  
+            total_sms = int(df_resultado['total_sms'].sum())              
+            
+            compromisos = len(df_resultado[
+                df_resultado['resultado_positivo'].isin(['Compromiso de pago', 'Compromiso de acuerdo de pago'])
+            ])
+            
+            asesores_unicos = set()
+            asesores_unicos.update(df_resultado['asesor_positivo'].unique())
+            asesores_unicos.update(df_resultado['asesor_ultimo'].unique())
+            asesores_unicos.discard('N/A')
+            n_asesores = len(asesores_unicos)
 
-    # Función para renderizar tarjetas KPI
-    def render_kpi(icon, label, value, color="#ffffff", text_color="#000000"):
-        st.markdown(f"""
-            <div style="padding: 1rem; margin-bottom: 1rem; background-color: {color}; 
-            border-radius: 10px; box-shadow: 1px 1px 6px rgba(0,0,0,0.1); text-align:center;">
-                <div style="font-size: 2rem;">{icon}</div>
-                <div style="font-size: 1.5rem; font-weight: bold; color:{text_color}">{value:,}</div>
-                <div style="color: #555;">{label}</div>
-            </div>
-        """, unsafe_allow_html=True)
+             # Función para renderizar tarjetas KPI
+            def render_kpi(icon, label, value, color="#ffffff", text_color="#000000"):
+                st.markdown(f"""
+                    <div style="padding: 1rem; margin-bottom: 1rem; background-color: {color}; 
+                    border-radius: 10px; box-shadow: 1px 1px 6px rgba(0,0,0,0.1); text-align:center;">
+                        <div style="font-size: 2rem;">{icon}</div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color:{text_color}">{value:,}</div>
+                        <div style="color: #555;">{label}</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-    # Mostrar tarjetas en columnas
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        render_kpi("📄", "Total Registros", n_documentos, "#e3f2fd")
-        render_kpi("📉", "Sin Gestión", docs_sin_gestion, "#fff3e0")
-    
-    with col2:
-        render_kpi("📞", "Cantidad de Gestiones", total_gestiones, "#e8f5e9")
-        render_kpi("🤝", "Total Compromisos", compromisos, "#ede7f6")
-    
-    with col3:
-        render_kpi("✉️", "SMS Enviados", total_sms, "#e0f7fa")
-        render_kpi("👥", "Asesores", n_asesores if n_asesores > 0 else "N/A", "#fce4ec")
-    
+            # Mostrar tarjetas KPI
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                render_kpi("📄", "Total Registros", n_documentos, "#e8f5e9")
+                render_kpi("📉", "Sin Gestión", docs_sin_gestion, "#e8f5e9")
+            
+            with col2:
+                render_kpi("📞", "Cantidad de Gestiones", total_gestiones, "#e8f5e9")
+                render_kpi("🤝", "Total Compromisos", compromisos, "#e8f5e9")
+            
+            with col3:
+                render_kpi("✉️", "SMS Enviados", total_sms, "#e8f5e9")
+                render_kpi("👥", "Asesores", n_asesores if n_asesores > 0 else "N/A", "#e8f5e9")
+            
 
-    st.subheader(f"📋 Resultados para base '{base_seleccionada}'")
-    st.dataframe(
-        df_resultado,
-        use_container_width=True,
-        column_config={
-            "fecha_entrega": st.column_config.DateColumn(format="DD/MM/YYYY"),
-            "fecha_ultima_gestion": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
-            "fecha_gestion_positiva": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
-            "total_gestiones": st.column_config.NumberColumn("Total Gestiones"),
-            "total_sms": st.column_config.NumberColumn("Total SMS")
-        }
-    )
+            st.subheader(f"📋 Resultados para base '{base_seleccionada}'")
+            st.dataframe(
+                df_resultado,
+                use_container_width=True,
+                column_config={
+                    "fecha_entrega": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                    "fecha_ultima_gestion": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
+                    "fecha_gestion_positiva": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
+                    "total_gestiones": st.column_config.NumberColumn("Total Gestiones"),
+                    "total_sms": st.column_config.NumberColumn("Total SMS")
+                }
+            )
 
-    # 10. Descargar Excel
-    excel_buffer = BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df_resultado.to_excel(writer, index=False, sheet_name="resultados")
-    
-    st.download_button(
-        label="📥 Descargar reporte completo",
-        data=excel_buffer.getvalue(),
-        file_name=f"reporte_completo_{base_seleccionada}_{fecha_seleccionada}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+            # Descargar Excel
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                df_resultado.to_excel(writer, index=False, sheet_name="resultados")
+            
+            st.download_button(
+                label="📥 Descargar reporte completo",
+                data=excel_buffer.getvalue(),
+                file_name=f"reporte_completo_{base_seleccionada}_{fecha_seleccionada}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     conn.close()
 # ==============================================

@@ -2,6 +2,7 @@
 *.xlsx
 *.csv
 *.txt
+*.log
 
 # Archivos de entorno
 .env

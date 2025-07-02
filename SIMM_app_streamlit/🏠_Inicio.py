@@ -95,7 +95,9 @@ def main():
         ### Funcionalidades principales:
         - 🕵️‍♂️ **Consultas**: Análisis detallado de gestiones existentes
         - ✏️ **Actualización**: Modificación y carga de nuevos registros
-        - 📊 **Dashboards**: Reportes ejecutivos con indicadores clave
+        - 🔀 **Cruce de Bases**: Comparación de datos entre SIMM y Andes-Wolkvo
+        - 📈 **Productividad**: Analisis temporal de las bases gestionadas
+        - 🗃️ **Cartera**: visualización de cartera de clientes y gestiones
     """)
     
     # Obtener conexiones (se cachean automáticamente)
