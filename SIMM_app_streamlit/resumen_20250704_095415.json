@@ -1,0 +1,11 @@
+{
+  "fecha_procesamiento": "2025-07-04T09:54:15.100800",
+  "estadisticas": {
+    "archivos_encontrados": 55,
+    "archivos_nuevos": 55,
+    "archivos_procesados_exitosos": 165,
+    "archivos_con_errores": 0,
+    "registros_ap": 26111,
+    "registros_comp": 62050
+  }
+}

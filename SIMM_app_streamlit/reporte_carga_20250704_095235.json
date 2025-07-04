@@ -1,0 +1,35 @@
+{
+  "fecha_reporte": "2025-07-04T09:52:36.261592",
+  "estadisticas_carga": {
+    "cargas_exitosas": 0,
+    "cargas_fallidas": 0,
+    "registros_ap": 0,
+    "registros_comp": 0,
+    "total_registros": 0
+  },
+  "estado_tablas": {
+    "AP": {
+      "tabla": "pagos_ap",
+      "existe": true,
+      "registros": 0,
+      "min_fecha": null,
+      "max_fecha": null,
+      "usuarios_unicos": 0,
+      "estado": "OK"
+    },
+    "COMP": {
+      "tabla": "pagos_comparendos",
+      "existe": true,
+      "registros": 0,
+      "min_fecha": null,
+      "max_fecha": null,
+      "usuarios_unicos": 0,
+      "estado": "OK"
+    }
+  },
+  "resumen": {
+    "total_cargas": 0,
+    "tasa_exito": 0.0,
+    "total_registros_cargados": 0
+  }
+}
