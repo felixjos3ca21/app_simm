@@ -52,6 +52,7 @@ def crear_tablas():
             'archivos_procesados_pagos': """
                 CREATE TABLE IF NOT EXISTS archivos_procesados_pagos (
                     id SERIAL PRIMARY KEY,
+                    nombre_archivo VARCHAR(255) NOT NULL,
                     ruta_archivo VARCHAR(500) NOT NULL,
                     tipo_archivo VARCHAR(20) NOT NULL,
                     fecha_procesamiento TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
