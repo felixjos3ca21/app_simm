@@ -1,0 +1,17 @@
+FROM python:3.10
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Copiar todo el contenido
+COPY . /app
+
+# Instalar dependencias
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+
+# Puerto por defecto de Streamlit
+EXPOSE 8501
+
+# Ejecutar la app
+CMD ["streamlit", "run", "🏠_Inicio.py", "--server.port=8501", "--server.address=0.0.0.0"]

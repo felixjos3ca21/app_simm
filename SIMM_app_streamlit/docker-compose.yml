@@ -1,0 +1,43 @@
+services:
+  db_simm:
+    image: postgres:15
+    container_name: simm_db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_SIMM_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - simm_data:/var/lib/postgresql/data
+
+  db_andes:
+    image: postgres:15
+    container_name: andes_db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_ANDES_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - andes_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: simm_app
+    ports:
+      - "8501:8501"
+    depends_on:
+      - db_simm
+      - db_andes
+    env_file:
+      - .env
+
+volumes:
+  simm_data:
+  andes_data:

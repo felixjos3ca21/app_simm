@@ -610,11 +610,15 @@ def seleccionar_directorio():
     root.withdraw()
     root.wm_attributes('-topmost', 1)
     try:
+        # Usa la última ruta si existe, si no una predeterminada, si no el cwd
+        initial_dir = st.session_state.get('ultima_ruta_usada', r'C:\Users\1513873.ANDESBPO\ANDES BPO S.A.S\Johan Felipe JG. Gómez Arango - SIMM\Gestiones\BASES')  # Cambia aquí tu ruta predeterminada
         dir_path = filedialog.askdirectory(
             title="Seleccione el directorio con los archivos de pagos",
-            initialdir=os.getcwd()
+            initialdir=initial_dir
         )
         root.destroy()
+        if dir_path:
+            st.session_state['ultima_ruta_usada'] = dir_path  # Guarda la última ruta seleccionada
         return dir_path
     except Exception as e:
         st.error(f"Error al seleccionar directorio: {e}")
