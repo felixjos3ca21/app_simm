@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS tipificaciones_3 (
                 agent_name TEXT,
                 agent_dni TEXT,
                 skill_id TEXT,
-                date TIMESTAMP,  -- Cambiado a TIMESTAMP para guardar fecha y hora
+                date TIMESTAMP,  
                 cod_act TEXT,
                 description_cod_act TEXT,
                 cod_act_2 TEXT,
@@ -150,10 +150,11 @@ CREATE TABLE IF NOT EXISTS tipificaciones_3 (
                 type_interaction TEXT,
                 telephone TEXT,
                 destiny TEXT,
-                time TIME,  -- Solo hora para esta columna
+                time TIME,  
                 hang_up TEXT,
                 customer_id TEXT,
                 campaign_id TEXT,
+                archivo_origen TEXT,
                 module TEXT
 );
 
@@ -161,8 +162,49 @@ CREATE TABLE IF NOT EXISTS archivos_procesados_tip3 (
                 id SERIAL PRIMARY KEY,
                 nombre_archivo VARCHAR(255) UNIQUE NOT NULL,
                 fecha_procesado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                registros_insertados INTEGER
+                registros_insertados INTEGER,
+                estado VARCHAR(20),
+                intentos INTEGER DEFAULT 0,
+                error_message TEXT
 );
+
+CREATE TABLE IF NOT EXISTS campanas_3 (
+                campaign_id TEXT, 
+                customer_name TEXT, 
+                customer_last_name TEXT,
+                id_type TEXT, 
+                customer_id TEXT, 
+                date TIMESTAMP,
+                telephone TEXT, 
+                result TEXT, 
+                opt1 TEXT, 
+                opt2 TEXT,
+                opt3 TEXT, 
+                opt4 TEXT,
+                opt5 TEXT, 
+                opt6 TEXT, 
+                opt7 TEXT, 
+                opt8 TEXT, 
+                opt9 TEXT, 
+                opt10 TEXT,
+                opt11 TEXT, 
+                opt12 TEXT, 
+                conn_id TEXT, 
+                Module TEXT,
+                archivo_origen TEXT
+            );
+
+CREATE TABLE IF NOT EXISTS archivos_procesados_campanas_3 (
+                    id SERIAL PRIMARY KEY,
+                    nombre_archivo VARCHAR(255) UNIQUE NOT NULL,
+                    fecha_procesado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    registros_insertados INTEGER,
+                    estado VARCHAR(20) DEFAULT 'completado',
+                    intentos INTEGER DEFAULT 1,
+                    error_message TEXT
+                )
+
+
 
 -- Crear vista materializada si no existe
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_id_gestiones AS
