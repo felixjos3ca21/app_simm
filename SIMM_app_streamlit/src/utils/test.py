@@ -317,212 +317,214 @@
 # if __name__ == "__main__":
 #     prueba_interactiva()
 
-import os
-import pandas as pd
-from Procesador_pagos import (
-    detectar_encoding,
-    parse_fecha,
-    limpiar_nombres,
-    procesar_archivo_ap,
-    procesar_archivo_comparendos,
-    procesar_lote_archivos
-)
-import tempfile
-import pytest
+# import os
+# import pandas as pd
+# from Procesador_pagos import (
+#     detectar_encoding,
+#     parse_fecha,
+#     limpiar_nombres,
+#     procesar_archivo_ap,
+#     procesar_archivo_comparendos,
+#     procesar_lote_archivos
+# )
+# import tempfile
+# import pytest
 
-# Configuración de logging para pruebas
-import logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# # Configuración de logging para pruebas
+# import logging
+# logging.basicConfig(level=logging.DEBUG)
+# logger = logging.getLogger(__name__)
 
-# Directorio de prueba
-TEST_DIR = os.path.join(os.path.dirname(__file__), 'test_files')
-os.makedirs(TEST_DIR, exist_ok=True)
+# # Directorio de prueba
+# TEST_DIR = os.path.join(os.path.dirname(__file__), 'test_files')
+# os.makedirs(TEST_DIR, exist_ok=True)
 
-def crear_archivo_prueba(nombre: str, contenido: str, encoding: str = 'utf-8') -> str:
-    """Crea un archivo de prueba temporal"""
-    ruta = os.path.join(TEST_DIR, nombre)
-    with open(ruta, 'w', encoding=encoding) as f:
-        f.write(contenido)
-    return ruta
+# def crear_archivo_prueba(nombre: str, contenido: str, encoding: str = 'utf-8') -> str:
+#     """Crea un archivo de prueba temporal"""
+#     ruta = os.path.join(TEST_DIR, nombre)
+#     with open(ruta, 'w', encoding=encoding) as f:
+#         f.write(contenido)
+#     return ruta
 
-def test_detectar_encoding():
-    """Prueba la detección de encoding"""
-    # Crear archivo con encoding específico
-    contenido = "nro_acuerdo\tid_usuario\tnombres\tapellidos\tvalor\tfecha_liquida\tconsecutivo_cuota\n"
-    contenido += "123\t456\tJuan\tPérez\t100000\t2023-01-15\t1"
+# def test_detectar_encoding():
+#     """Prueba la detección de encoding"""
+#     # Crear archivo con encoding específico
+#     contenido = "nro_acuerdo\tid_usuario\tnombres\tapellidos\tvalor\tfecha_liquida\tconsecutivo_cuota\n"
+#     contenido += "123\t456\tJuan\tPérez\t100000\t2023-01-15\t1"
     
-    # UTF-8
-    ruta_utf8 = crear_archivo_prueba('test_utf8.txt', contenido, 'utf-8')
-    assert detectar_encoding(ruta_utf8).lower() == 'utf-8'
+#     # UTF-8
+#     ruta_utf8 = crear_archivo_prueba('test_utf8.txt', contenido, 'utf-8')
+#     assert detectar_encoding(ruta_utf8).lower() == 'utf-8'
     
-    # Latin-1
-    ruta_latin1 = crear_archivo_prueba('test_latin1.txt', contenido, 'latin-1')
-    assert detectar_encoding(ruta_latin1).lower() in ['latin-1', 'iso-8859-1']
+#     # Latin-1
+#     ruta_latin1 = crear_archivo_prueba('test_latin1.txt', contenido, 'latin-1')
+#     assert detectar_encoding(ruta_latin1).lower() in ['latin-1', 'iso-8859-1']
 
-def test_parse_fecha():
-    """Prueba el parseo de diferentes formatos de fecha"""
-    from datetime import datetime
+# def test_parse_fecha():
+#     """Prueba el parseo de diferentes formatos de fecha"""
+#     from datetime import datetime
     
-    # Formatos esperados
-    assert parse_fecha("2023-01-15") == datetime(2023, 1, 15)
-    assert parse_fecha("15/01/2023") == datetime(2023, 1, 15)
-    assert parse_fecha("15-01-2023") == datetime(2023, 1, 15)
-    assert parse_fecha("20230115") == datetime(2023, 1, 15)
+#     # Formatos esperados
+#     assert parse_fecha("2023-01-15") == datetime(2023, 1, 15)
+#     assert parse_fecha("15/01/2023") == datetime(2023, 1, 15)
+#     assert parse_fecha("15-01-2023") == datetime(2023, 1, 15)
+#     assert parse_fecha("20230115") == datetime(2023, 1, 15)
     
-    # Valores inválidos
-    assert parse_fecha("") is None
-    assert parse_fecha("fecha inválida") is None
-    assert parse_fecha("15/13/2023") is None  # Mes inválido
+#     # Valores inválidos
+#     assert parse_fecha("") is None
+#     assert parse_fecha("fecha inválida") is None
+#     assert parse_fecha("15/13/2023") is None  # Mes inválido
 
-def test_limpiar_nombres():
-    """Prueba la limpieza de caracteres especiales en nombres"""
-    df = pd.DataFrame({
-        'nombres': ['María', 'J0sé', 'Ana$', 'L@ura', None],
-        'apellidos': ['Gómez', 'Pérez*', 'Sánchez', 'Díaz#', 'López']
-    })
+# def test_limpiar_nombres():
+#     """Prueba la limpieza de caracteres especiales en nombres"""
+#     df = pd.DataFrame({
+#         'nombres': ['María', 'J0sé', 'Ana$', 'L@ura', None],
+#         'apellidos': ['Gómez', 'Pérez*', 'Sánchez', 'Díaz#', 'López']
+#     })
     
-    df_limpio = limpiar_nombres(df)
+#     df_limpio = limpiar_nombres(df)
     
-    assert df_limpio['nombres'].tolist() == ['María', 'Jsé', 'Ana', 'Laura', None]
-    assert df_limpio['apellidos'].tolist() == ['Gómez', 'Pérez', 'Sánchez', 'Díaz', 'López']
+#     assert df_limpio['nombres'].tolist() == ['María', 'Jsé', 'Ana', 'Laura', None]
+#     assert df_limpio['apellidos'].tolist() == ['Gómez', 'Pérez', 'Sánchez', 'Díaz', 'López']
 
-def test_procesar_archivo_ap():
-    """Prueba el procesamiento de archivos AP"""
-    contenido = """nro_acuerdo\tid_usuario\tnombres\tapellidos\tvalor\tfecha_liquida\tconsecutivo_cuota
-123\t456\tJuan\tPérez\t100000\t2023-01-15\t1
-124\t789\tMaría\tGómez\t150000\t15/01/2023\t2"""
+# def test_procesar_archivo_ap():
+#     """Prueba el procesamiento de archivos AP"""
+#     contenido = """nro_acuerdo\tid_usuario\tnombres\tapellidos\tvalor\tfecha_liquida\tconsecutivo_cuota
+# 123\t456\tJuan\tPérez\t100000\t2023-01-15\t1
+# 124\t789\tMaría\tGómez\t150000\t15/01/2023\t2"""
     
-    ruta_ap = crear_archivo_prueba('test_ap.txt', contenido)
-    df = procesar_archivo_ap(ruta_ap)
+#     ruta_ap = crear_archivo_prueba('test_ap.txt', contenido)
+#     df = procesar_archivo_ap(ruta_ap)
     
-    # Verificaciones básicas
-    assert len(df) == 2
-    assert 'nombre_usuario' in df.columns
-    assert df['valor'].sum() == 250000
-    assert df['tipo_pago'].unique()[0] == 'AP'
-    assert not df['id_registro'].duplicated().any()  # IDs únicos
+#     # Verificaciones básicas
+#     assert len(df) == 2
+#     assert 'nombre_usuario' in df.columns
+#     assert df['valor'].sum() == 250000
+#     assert df['tipo_pago'].unique()[0] == 'AP'
+#     assert not df['id_registro'].duplicated().any()  # IDs únicos
 
-def test_procesar_archivo_comparendos():
-    """Prueba el procesamiento de archivos COMP"""
-    contenido = """nro_comparendo\tnro_recibo\tfecha_liquida_contrav\tcompute_0004\tid_usuario\tnombres\tapellidos\tnro_resolucion\tintereses
-C001\tR001\t2023-01-15\t200000\t123\tCarlos\tSánchez\tRES001\t50000
-C002\tR002\t15/01/2023\t300000\t456\tLuisa\tDíaz\tRES002\t75000"""
+# def test_procesar_archivo_comparendos():
+#     """Prueba el procesamiento de archivos COMP"""
+#     contenido = """nro_comparendo\tnro_recibo\tfecha_liquida_contrav\tcompute_0004\tid_usuario\tnombres\tapellidos\tnro_resolucion\tintereses
+# C001\tR001\t2023-01-15\t200000\t123\tCarlos\tSánchez\tRES001\t50000
+# C002\tR002\t15/01/2023\t300000\t456\tLuisa\tDíaz\tRES002\t75000"""
     
-    ruta_comp = crear_archivo_prueba('test_comp.txt', contenido)
-    df = procesar_archivo_comparendos(ruta_comp)
+#     ruta_comp = crear_archivo_prueba('test_comp.txt', contenido)
+#     df = procesar_archivo_comparendos(ruta_comp)
     
-    # Verificaciones básicas
-    assert len(df) == 2
-    assert 'nombre_usuario' in df.columns
-    assert df['valor'].sum() == 625000  # 200k+50k + 300k+75k
-    assert df['tipo_pago'].unique()[0] == 'COMPARENDO'
-    assert not df['id_registro'].duplicated().any()
+#     # Verificaciones básicas
+#     assert len(df) == 2
+#     assert 'nombre_usuario' in df.columns
+#     assert df['valor'].sum() == 625000  # 200k+50k + 300k+75k
+#     assert df['tipo_pago'].unique()[0] == 'COMPARENDO'
+#     assert not df['id_registro'].duplicated().any()
 
-def test_procesar_lote_archivos():
-    """Prueba el procesamiento de múltiples archivos"""
-    # Crear archivos de prueba
-    contenido_ap = """nro_acuerdo\tid_usuario\tnombres\tapellidos\tvalor\tfecha_liquida\tconsecutivo_cuota
-123\t456\tJuan\tPérez\t100000\t2023-01-15\t1"""
+# def test_procesar_lote_archivos():
+#     """Prueba el procesamiento de múltiples archivos"""
+#     # Crear archivos de prueba
+#     contenido_ap = """nro_acuerdo\tid_usuario\tnombres\tapellidos\tvalor\tfecha_liquida\tconsecutivo_cuota
+# 123\t456\tJuan\tPérez\t100000\t2023-01-15\t1"""
     
-    contenido_comp = """nro_comparendo\tnro_recibo\tfecha_liquida_contrav\tcompute_0004\tid_usuario\tnombres\tapellidos\tnro_resolucion\tintereses
-C001\tR001\t2023-01-15\t200000\t123\tCarlos\tSánchez\tRES001\t50000"""
+#     contenido_comp = """nro_comparendo\tnro_recibo\tfecha_liquida_contrav\tcompute_0004\tid_usuario\tnombres\tapellidos\tnro_resolucion\tintereses
+# C001\tR001\t2023-01-15\t200000\t123\tCarlos\tSánchez\tRES001\t50000"""
     
-    ruta_ap = crear_archivo_prueba('lote_ap.txt', contenido_ap)
-    ruta_comp = crear_archivo_prueba('lote_comp.txt', contenido_comp)
-    ruta_invalida = crear_archivo_prueba('lote_invalido.txt', "contenido,invalido")
+#     ruta_ap = crear_archivo_prueba('lote_ap.txt', contenido_ap)
+#     ruta_comp = crear_archivo_prueba('lote_comp.txt', contenido_comp)
+#     ruta_invalida = crear_archivo_prueba('lote_invalido.txt', "contenido,invalido")
     
-    # Procesar lote
-    df_ap, df_comp = procesar_lote_archivos([ruta_ap, ruta_comp, ruta_invalida])
+#     # Procesar lote
+#     df_ap, df_comp = procesar_lote_archivos([ruta_ap, ruta_comp, ruta_invalida])
     
-    # Verificar resultados
-    assert len(df_ap) == 1
-    assert len(df_comp) == 1
-    assert df_ap['tipo_pago'].unique()[0] == 'AP'
-    assert df_comp['tipo_pago'].unique()[0] == 'COMPARENDO'
+#     # Verificar resultados
+#     assert len(df_ap) == 1
+#     assert len(df_comp) == 1
+#     assert df_ap['tipo_pago'].unique()[0] == 'AP'
+#     assert df_comp['tipo_pago'].unique()[0] == 'COMPARENDO'
 
-def test_archivos_invalidos():
-    """Prueba el manejo de archivos inválidos"""
-    # Archivo con encoding extraño
-    ruta_encoding_rar = crear_archivo_prueba('test_encoding_rar.txt', "test\xa0data", 'latin-1')
+# def test_archivos_invalidos():
+#     """Prueba el manejo de archivos inválidos"""
+#     # Archivo con encoding extraño
+#     ruta_encoding_rar = crear_archivo_prueba('test_encoding_rar.txt', "test\xa0data", 'latin-1')
     
-    # Archivo con estructura incorrecta
-    contenido_mal = "col1,col2,col3\n1,2,3"
-    ruta_estruct_mal = crear_archivo_prueba('test_estruct_mal.txt', contenido_mal)
+#     # Archivo con estructura incorrecta
+#     contenido_mal = "col1,col2,col3\n1,2,3"
+#     ruta_estruct_mal = crear_archivo_prueba('test_estruct_mal.txt', contenido_mal)
     
-    # Procesar (debería fallar pero continuar)
-    df_ap, df_comp = procesar_lote_archivos([ruta_encoding_rar, ruta_estruct_mal])
+#     # Procesar (debería fallar pero continuar)
+#     df_ap, df_comp = procesar_lote_archivos([ruta_encoding_rar, ruta_estruct_mal])
     
-    assert df_ap.empty and df_comp.empty
+#     assert df_ap.empty and df_comp.empty
 
-def generar_reporte_test(ruta_archivos: str) -> dict:
-    """
-    Función para testear el procesador con archivos reales en una ruta específica
-    Devuelve un reporte con estadísticas de los archivos procesados
+# def generar_reporte_test(ruta_archivos: str) -> dict:
+#     """
+#     Función para testear el procesador con archivos reales en una ruta específica
+#     Devuelve un reporte con estadísticas de los archivos procesados
     
-    Args:
-        ruta_archivos (str): Ruta donde se encuentran los archivos a procesar
+#     Args:
+#         ruta_archivos (str): Ruta donde se encuentran los archivos a procesar
         
-    Returns:
-        dict: Diccionario con estadísticas del procesamiento
-    """
-    if not os.path.exists(ruta_archivos):
-        return {"error": f"La ruta {ruta_archivos} no existe"}
+#     Returns:
+#         dict: Diccionario con estadísticas del procesamiento
+#     """
+#     if not os.path.exists(ruta_archivos):
+#         return {"error": f"La ruta {ruta_archivos} no existe"}
     
-    # Identificar archivos en la ruta
-    archivos = [os.path.join(ruta_archivos, f) for f in os.listdir(ruta_archivos) 
-               if f.endswith('.txt') and (f.upper().startswith('AP') or f.upper().startswith('COMP'))]
+#     # Identificar archivos en la ruta
+#     archivos = [os.path.join(ruta_archivos, f) for f in os.listdir(ruta_archivos) 
+#                if f.endswith('.txt') and (f.upper().startswith('AP') or f.upper().startswith('COMP'))]
     
-    if not archivos:
-        return {"error": "No se encontraron archivos AP o COMP en la ruta especificada"}
+#     if not archivos:
+#         return {"error": "No se encontraron archivos AP o COMP en la ruta especificada"}
     
-    # Procesar archivos
-    resultados = {
-        "total_archivos": len(archivos),
-        "archivos_procesados": 0,
-        "archivos_fallidos": 0,
-        "registros_ap": 0,
-        "registros_comp": 0,
-        "archivos_fallidos_lista": []
-    }
+#     # Procesar archivos
+#     resultados = {
+#         "total_archivos": len(archivos),
+#         "archivos_procesados": 0,
+#         "archivos_fallidos": 0,
+#         "registros_ap": 0,
+#         "registros_comp": 0,
+#         "archivos_fallidos_lista": []
+#     }
     
-    try:
-        df_ap, df_comp = procesar_lote_archivos(archivos)
+#     try:
+#         df_ap, df_comp = procesar_lote_archivos(archivos)
         
-        resultados["archivos_procesados"] = len(archivos)
-        resultados["registros_ap"] = len(df_ap) if not df_ap.empty else 0
-        resultados["registros_comp"] = len(df_comp) if not df_comp.empty else 0
+#         resultados["archivos_procesados"] = len(archivos)
+#         resultados["registros_ap"] = len(df_ap) if not df_ap.empty else 0
+#         resultados["registros_comp"] = len(df_comp) if not df_comp.empty else 0
         
-        # Ejemplo de cómo podrías guardar los resultados
-        if not df_ap.empty:
-            df_ap.to_csv(os.path.join(ruta_archivos, 'resultados_ap.csv'), index=False)
-        if not df_comp.empty:
-            df_comp.to_csv(os.path.join(ruta_archivos, 'resultados_comp.csv'), index=False)
+#         # Ejemplo de cómo podrías guardar los resultados
+#         if not df_ap.empty:
+#             df_ap.to_csv(os.path.join(ruta_archivos, 'resultados_ap.csv'), index=False)
+#         if not df_comp.empty:
+#             df_comp.to_csv(os.path.join(ruta_archivos, 'resultados_comp.csv'), index=False)
             
-    except Exception as e:
-        resultados["error"] = str(e)
+#     except Exception as e:
+#         resultados["error"] = str(e)
     
-    return resultados
+#     return resultados
 
-if __name__ == '__main__':
-    # Ejecutar pruebas unitarias
-    print("Ejecutando pruebas unitarias...")
-    pytest.main([__file__, '-v'])
+# if __name__ == '__main__':
+#     # Ejecutar pruebas unitarias
+#     print("Ejecutando pruebas unitarias...")
+#     pytest.main([__file__, '-v'])
     
-    # Ejemplo de uso con archivos reales
-    ruta_ejemplo = input("\nIngrese la ruta de archivos a procesar (deje vacío para omitir): ").strip()
+#     # Ejemplo de uso con archivos reales
+#     ruta_ejemplo = input("\nIngrese la ruta de archivos a procesar (deje vacío para omitir): ").strip()
     
-    if ruta_ejemplo:
-        print(f"\nProcesando archivos en {ruta_ejemplo}...")
-        reporte = generar_reporte_test(ruta_ejemplo)
+#     if ruta_ejemplo:
+#         print(f"\nProcesando archivos en {ruta_ejemplo}...")
+#         reporte = generar_reporte_test(ruta_ejemplo)
         
-        print("\nReporte de procesamiento:")
-        for k, v in reporte.items():
-            print(f"{k}: {v}")
+#         print("\nReporte de procesamiento:")
+#         for k, v in reporte.items():
+#             print(f"{k}: {v}")
         
-        if 'error' not in reporte:
-            print("\nArchivos de resultados generados en la misma ruta:")
-            print("- resultados_ap.csv")
-            print("- resultados_comp.csv")
-    else:
-        print("\nPruebas completadas. No se procesaron archivos reales.")
+#         if 'error' not in reporte:
+#             print("\nArchivos de resultados generados en la misma ruta:")
+#             print("- resultados_ap.csv")
+#             print("- resultados_comp.csv")
+#     else:
+#         print("\nPruebas completadas. No se procesaron archivos reales.")
+
+

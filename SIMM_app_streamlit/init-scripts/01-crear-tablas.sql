@@ -184,6 +184,3 @@ BEGIN
     RAISE NOTICE 'Todas las tablas han sido creadas exitosamente en la base de datos %', current_database();
 END
 $$;
-
-
-
