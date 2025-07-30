@@ -61,7 +61,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         })
 
         # =============================================================================
-        # 4. Manejo de datos faltantes (MOVIDO AL INICIO)
+        # 4. Manejo de datos faltantes 
         # =============================================================================
         update_step("Manejando datos faltantes")
         
@@ -79,7 +79,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
             df['Número documento'].astype(str),
             df['Teléfono']
         )
-
+        df['Código gestión'] = df['Código gestión'].astype(str).str.strip()
         # =============================================================================
         # 5. Generación de Código Gestión 
         # =============================================================================

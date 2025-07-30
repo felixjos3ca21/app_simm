@@ -266,7 +266,7 @@ def get_db_url(db_name):
 
 try:
     engine_simm = create_engine(get_db_url('SIMM'))
-    engine_andes = create_engine(get_db_url('ANDES'))
+    engine_andes = create_engine(get_db_url('SIMM'))
 except Exception as e:
     st.error(f"❌ Error creando motores de conexión: {e}")
 
