@@ -10,7 +10,18 @@ from src.utils.limpieza_sms import preparar_datos_sms
 from src.utils.limpieza_pagos import procesar_pagos
 from src.utils.limpieza_bases import preparar_datos_bases
 from src.utils.fondo import set_background
-import time
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app_simm_actualizacion.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
@@ -54,8 +65,6 @@ st.markdown("""
 
 st.image("src/utils/logo-andesbpo-359x143.png", width=150)
 set_background("src/utils/bg-seccion.png")
-
-engine = DatabaseManager.get_engine('SIMM')
 
 # ==============================================================================
 # CLASE BASE: DataProcessor
@@ -105,15 +114,18 @@ class DataProcessor:
         """Ejecuta solo el procesamiento y validación (sin carga)"""
         with st.status("🔄 Procesando archivo ...", expanded=True) as status:
             try:
+                logger.info(f"Procesando archivo: {archivo.name}")
                 # Procesamiento individual
                 self.df_procesado, self.df_errores, mensaje = self._procesar_archivo(archivo)
                 
                 if self.df_procesado.empty:
+                    logger.warning("⚠️ El archivo no contiene datos válidos")
                     st.warning("⚠️ El archivo no contiene datos válidos")
                     return False
                 
                 # Validación estructural
                 if not self._validar_estructura(self.df_procesado):
+                    logger.error("❌ Error en la estructura del archivo")
                     st.error("❌ Error en la estructura del archivo")
                     return False
                 
@@ -125,6 +137,7 @@ class DataProcessor:
                 
             except Exception as e:
                 status.update(label="❌ Error en el proceso", state="error")
+                logger.error(f"Error crítico: {str(e)}")
                 st.error(f"Error crítico: {str(e)}")
                 return False
 
@@ -183,6 +196,7 @@ class DataProcessor:
     def _cargar_datos(self):
         """Carga los datos en la base de datos con tolerancia a fallos de UI"""
         if self.nuevos is None or self.nuevos.empty:
+            logger.warning("⚠️ No hay registros nuevos para cargar.")
             st.warning("⚠️ No hay registros nuevos para cargar.")
             return False
 
@@ -794,7 +808,7 @@ class StreamlitUI:
         """Muestra los resultados del procesamiento"""
         col1, col2 = st.columns([2, 3])
         
-        with col2:
+        with col1:
             st.subheader("📊 Resultados del Procesamiento")
             
             if hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
@@ -803,6 +817,14 @@ class StreamlitUI:
                 cols[1].metric("🆕 Nuevos", len(getattr(processor, 'nuevos', pd.DataFrame())))
                 cols[2].metric("📋 Duplicados", getattr(processor, 'duplicados', 0))
                 cols[3].metric("❌ Errores", len(getattr(processor, 'df_errores', pd.DataFrame())))
+                # Imprimir estadísticas en el log
+                logger.info(
+                    f"Estadísticas procesamiento: "
+                    f"Válidos={len(processor.df_procesado)}, "
+                    f"Nuevos={len(getattr(processor, 'nuevos', pd.DataFrame()))}, "
+                    f"Duplicados={getattr(processor, 'duplicados', 0)}, "
+                    f"Errores={len(getattr(processor, 'df_errores', pd.DataFrame()))}"
+                )
             
             if hasattr(processor, 'nuevos') and len(processor.nuevos) > 0:
                 st.divider()
@@ -819,6 +841,7 @@ class StreamlitUI:
                         st.balloons()
                         self._reset_upload_state()
                     except Exception as e:
+                        logger.error(f"Error en carga: {str(e)}")
                         st.error(f"Error en carga: {str(e)}")
 
 # ==============================================================================

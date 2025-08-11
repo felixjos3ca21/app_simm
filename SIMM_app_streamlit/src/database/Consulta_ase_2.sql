@@ -1,6 +1,4 @@
 select * from asesor_2
-limit 5
-;
 
 -- Vaciar la tabla principal de asesor_2
 DROP TABLE asesor_2;
@@ -24,3 +22,17 @@ SELECT
         'HH24:MI:SS'
     ) AS tiempo_hhmmss
 FROM asesor_2;
+
+
+SELECT 
+    column_name, 
+    data_type,
+    character_maximum_length,
+    is_nullable,
+    column_default
+FROM 
+    information_schema.columns
+WHERE 
+    table_name = 'asesor_2'
+ORDER BY 
+    ordinal_position;

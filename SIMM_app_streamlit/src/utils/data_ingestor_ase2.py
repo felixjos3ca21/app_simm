@@ -333,7 +333,7 @@ class DataIngestorASE2:
             'error': None,
             'error_type': None,
             'is_retry': is_retry,
-            'no_valid_records': False  
+            'no_valid_records': False
         }
         
         try:
@@ -345,67 +345,82 @@ class DataIngestorASE2:
             # Caso especial: archivo sin registros válidos
             if len(df) == 0:
                 result.update({
-                    'success': True,  # Considerado éxito técnico
+                    'success': True,
+                    'records': 0,
                     'no_valid_records': True,
                     'error': "Archivo no contiene registros con module='andes-movilidadtigo'"
                 })
+                
+                # Registrar en BD como procesado (sin registros válidos)
+                with self.engine.begin() as conn:
+                    conn.execute(text(f"""
+                        INSERT INTO {self.control_table} 
+                        (nombre_archivo, registros_insertados, estado, error_message, no_valid_records) 
+                        VALUES (:filename, 0, 'completado', :error, TRUE)
+                        ON CONFLICT (nombre_archivo) DO UPDATE SET
+                            registros_insertados = 0,
+                            estado = 'completado',
+                            fecha_procesado = CURRENT_TIMESTAMP,
+                            intentos = {self.control_table}.intentos + 1,
+                            error_message = :error,
+                            no_valid_records = TRUE,
+                            error_type = NULL,
+                            error_details = NULL,
+                            stack_trace = NULL,
+                            fecha_error = NULL
+                    """), {
+                        'filename': file_name,
+                        'error': result['error']
+                    })
+                
                 return result
             
-            # Conexión y procesamiento en BD
-            try:
-                with self.engine.begin() as conn:
-                    # Eliminar registros previos si es reintento
-                    if is_retry:
-                        try:
-                            conn.execute(
-                                text(f"DELETE FROM {self.target_table} WHERE archivo_origen = :filename"),
-                                {'filename': file_name}
-                            )
-                        except Exception as e:
-                            raise Exception(f"Error eliminando registros previos: {str(e)}") from e
-                    
-                    # Insertar nuevos registros
-                    try:
-                        df.to_sql(
-                            self.target_table,
-                            conn,
-                            if_exists='append',
-                            index=False,
-                            method='multi',
-                            chunksize=10000
-                        )
-                    except Exception as e:
-                        raise Exception(f"Error insertando registros: {str(e)}") from e
-                    
-                    # Actualizar tabla de control
-                    try:
-                        conn.execute(
-                            text(f"""
-                                INSERT INTO {self.control_table} 
-                                (nombre_archivo, registros_insertados, estado) 
-                                VALUES (:filename, :registros, 'completado')
-                                ON CONFLICT (nombre_archivo) DO UPDATE SET
-                                    registros_insertados = EXCLUDED.registros_insertados,
-                                    estado = 'completado',
-                                    fecha_procesado = CURRENT_TIMESTAMP,
-                                    intentos = {self.control_table}.intentos + 1,
-                                    error_message = NULL
-                            """),
-                            {'filename': file_name, 'registros': len(df)}
-                        )
-                    except Exception as e:
-                        raise Exception(f"Error actualizando tabla de control: {str(e)}") from e
+            # Resto del procesamiento normal para archivos con registros válidos...
+            with self.engine.begin() as conn:
+                # Eliminar registros previos si es reintento
+                if is_retry:
+                    conn.execute(
+                        text(f"DELETE FROM {self.target_table} WHERE archivo_origen = :filename"),
+                        {'filename': file_name}
+                    )
                 
-                result.update({
-                    'success': True,
-                    'records': len(df)
-                })
+                # Insertar nuevos registros
+                df.to_sql(
+                    self.target_table,
+                    conn,
+                    if_exists='append',
+                    index=False,
+                    method='multi',
+                    chunksize=10000
+                )
                 
-            except Exception as e:
-                raise e  # Re-lanzar excepciones de la conexión/BD
+                # Actualizar tabla de control
+                conn.execute(
+                    text(f"""
+                        INSERT INTO {self.control_table} 
+                        (nombre_archivo, registros_insertados, estado) 
+                        VALUES (:filename, :registros, 'completado')
+                        ON CONFLICT (nombre_archivo) DO UPDATE SET
+                            registros_insertados = EXCLUDED.registros_insertados,
+                            estado = 'completado',
+                            fecha_procesado = CURRENT_TIMESTAMP,
+                            intentos = {self.control_table}.intentos + 1,
+                            error_message = NULL,
+                            no_valid_records = FALSE,
+                            error_type = NULL,
+                            error_details = NULL,
+                            stack_trace = NULL,
+                            fecha_error = NULL
+                    """),
+                    {'filename': file_name, 'registros': len(df)}
+                )
+            
+            result.update({
+                'success': True,
+                'records': len(df)
+            })
             
         except Exception as e:
-            # Capturar TODOS los errores posibles
             error_type = type(e).__name__
             error_details = traceback.format_exc()
             
@@ -415,30 +430,38 @@ class DataIngestorASE2:
                 'error_details': error_details
             })
             
-            # Registrar en logs
             logger.error(f"ERROR PROCESANDO {file_name} - Tipo: {error_type}")
             logger.error(f"Mensaje: {str(e)}")
             logger.error(f"Detalles:\n{error_details}")
             
-            # Registrar en BD (con más detalles)
+            # Registrar error en BD
             try:
-                if result.get('no_valid_records', False):
-                    with self.engine.begin() as conn:
-                        conn.execute(text(f"""
-                            INSERT INTO {self.control_table} 
-                            (nombre_archivo, registros_insertados, estado, error_message, no_valid_records) 
-                            VALUES (:filename, 0, 'completado', :error, TRUE)
-                            ON CONFLICT (nombre_archivo) DO UPDATE SET
-                                registros_insertados = 0,
-                                estado = 'completado',
-                                fecha_procesado = CURRENT_TIMESTAMP,
-                                intentos = {self.control_table}.intentos + 1,
-                                error_message = :error,
-                                no_valid_records = TRUE
-                        """), {'filename': file_name, 'error': result['error']})
+                with self.engine.begin() as conn:
+                    conn.execute(text(f"""
+                        INSERT INTO {self.control_table} 
+                        (nombre_archivo, registros_insertados, estado, error_message, 
+                        error_type, error_details, stack_trace, fecha_error) 
+                        VALUES (:filename, 0, 'fallido', :error, :error_type, 
+                                :error_details, :stack_trace, CURRENT_TIMESTAMP)
+                        ON CONFLICT (nombre_archivo) DO UPDATE SET
+                            registros_insertados = 0,
+                            estado = 'fallido',
+                            intentos = {self.control_table}.intentos + 1,
+                            error_message = :error,
+                            error_type = :error_type,
+                            error_details = :error_details,
+                            stack_trace = :stack_trace,
+                            fecha_error = CURRENT_TIMESTAMP,
+                            no_valid_records = FALSE
+                    """), {
+                        'filename': file_name,
+                        'error': str(e),
+                        'error_type': error_type,
+                        'error_details': error_details,
+                        'stack_trace': error_details
+                    })
             except Exception as db_error:
                 logger.critical(f"NO SE PUDO REGISTRAR EL ERROR EN BD: {str(db_error)}")
-                logger.critical(f"Error original: {error_type} - {str(e)}")
         
         return result
 

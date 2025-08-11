@@ -1,4 +1,3 @@
-## Fin del Script
 # 08_Asesor.py
 import streamlit as st
 import pandas as pd
@@ -46,7 +45,7 @@ set_background("src/utils/bg-seccion.png")
 # Cargar variables de entorno
 load_dotenv()
 
-# Configuración de base de datos
+# Configuración de base de datos 
 DB_CONFIG = {
     'host': os.getenv('DB_SIMM_HOST', 'localhost'),
     'database': os.getenv('DB_SIMM_NAME', 'SIMM'),

@@ -3,6 +3,8 @@ from datetime import datetime
 import hashlib
 import numpy as np
 from typing import Tuple
+import logging
+logger = logging.getLogger(__name__)
 
 def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
     """
@@ -50,6 +52,7 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
                 errores_hojas.append(f"Hoja '{hoja}': Faltan {', '.join(faltantes)}")
         
         if not hojas_validas:
+            logger.error("Ninguna hoja válida encontrada")
             raise ValueError(f"Ninguna hoja válida:\n" + "\n".join(errores_hojas))
 
         # =============================================================================
@@ -85,10 +88,13 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         # =============================================================================
         update_step("Generando códigos de gestión")
         mask = df['Código gestión'].isna() | (df['Código gestión'] == '')
+        if mask.any():
+            logger.warning(f"{mask.sum()} registros sin Código gestión en {nombre_archivo}, se generó automáticamente.")
         df.loc[mask, 'Código gestión'] = (
             df['Número documento'].astype(str).str.strip() + '_' +
             df['Teléfono'].astype(str).str.strip()
         )
+        
 
         # =============================================================================
         # 6. Validación de fechas
@@ -156,7 +162,8 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         # Verificar IDs únicos
         if df['id_registro'].duplicated().any():
             duplicados = df[df.duplicated('id_registro', keep=False)]
-            raise ValueError(f"IDs duplicados:\n{duplicados[['documento', 'telefono']]}")
+            logger.error(f"IDs duplicados en {nombre_archivo}:\n{duplicados[['id_registro', 'documento', 'telefono']]}")
+            raise ValueError(f"IDs duplicados:\n{duplicados[['id_registro', 'documento', 'telefono']]}")
             
         # Verificar fechas válidas
         if df['fecha_gestion'].isna().any():
@@ -203,4 +210,5 @@ def preparar_datos(ruta_arcivo, nombre_archivo, update_progress=None) -> Tuple[p
         )
 
     except Exception as e:
+        logger.error(f"Error en paso {current_step} en {nombre_archivo}: {str(e)}")
         raise ValueError(f"Error en paso {current_step}: {str(e)}")

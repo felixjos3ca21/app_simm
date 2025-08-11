@@ -1,4 +1,3 @@
-
 import streamlit as st
 import os
 from pathlib import Path
@@ -13,6 +12,8 @@ from src.utils.data_ingestor_ase2 import DataIngestorASE2
 import logging
 import sys
 import pandas as pd
+from dotenv import load_dotenv
+import os
 
 # Configuración de página
 st.set_page_config(
@@ -52,13 +53,13 @@ set_background("src/utils/bg-seccion.png")
 # Cargar variables de entorno
 load_dotenv()
 
-# Configuración de base de datos desde .env
+
 DB_CONFIG = {
-    'host': os.getenv('DB_SIMM_HOST', 'localhost'),
-    'database': os.getenv('DB_SIMM_NAME', 'SIMM'),
-    'user': os.getenv('DB_SIMM_USER', 'postgres'),
-    'password': os.getenv('DB_SIMM_PASSWORD', 'admin'),
-    'port': os.getenv('DB_SIMM_PORT', '5432')
+    'host': os.environ['DB_SIMM_HOST'],
+    'database': os.environ['DB_SIMM_NAME'],
+    'user': os.environ['DB_SIMM_USER'],
+    'password': os.environ['DB_SIMM_PASSWORD'],
+    'port': os.environ['DB_SIMM_PORT']  
 }
 
 def setup_logging():
@@ -145,13 +146,13 @@ def show_tipificacion_3_ui():
         """, unsafe_allow_html=True)
         return
 
-    # Conexión exitosa
-    st.markdown("""
-    <div class='success-box'>
-        <h3>✅ Conexión Establecida</h3>
-        <p>Sistema listo para procesar archivos CSV de Wolkvox</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # # Conexión exitosa
+    # st.markdown("""
+    # <div class='success-box'>
+    #     <h3>✅ Conexión Establecida</h3>
+    #     <p>Sistema listo para procesar archivos CSV de Wolkvox</p>
+    # </div>
+    # """, unsafe_allow_html=True)
 
     # Selección de carpeta
     st.markdown("<h2 class='section-header'>📂 Selección de Carpeta</h2>", unsafe_allow_html=True)
@@ -1451,9 +1452,9 @@ def main():
     # Mostrar la UI correspondiente según la opción seleccionada
     if option == "Tipificación 3":
         show_tipificacion_3_ui()
-    elif option == "CDR":
+    elif option == "CDR 5":
         show_cdr5_ui()
-    elif option == "Campaña":
+    elif option == "Campañas 3":
         show_campana_ui()
     elif option == "Asesor 2":
         show_asesor_2_ui()

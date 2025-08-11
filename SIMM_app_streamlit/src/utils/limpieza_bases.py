@@ -4,6 +4,9 @@ import hashlib
 import numpy as np
 from typing import Tuple
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress=None) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
     """
@@ -44,7 +47,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
             'FECHA DE ENTREGA': 'datetime64[ns]',
             'TIPO DE DCTO': 'object',
             'IDENTIFICACIÓN': 'object',
-            'NOMBRE': 'object',  # Nota: En tu código original esperabas 'NOMBRE' pero en el error aparece 'NOMBRE' (con tilde)
+            'NOMBRE': 'object',  
             'NRO. COMPARENDO': 'object',
             'FECHA DE COMPARENDO': 'datetime64[ns]',  # Nueva columna que mencionas
             'CODIGO DE INFRACCIÓN': 'object',  # Nueva columna que mencionas
@@ -89,6 +92,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
                 if file_col in available_columns:
                     columns_to_read.append(file_col)
                 else:
+                    logger.warning(f"Columna '{file_col}' no encontrada en el archivo, se usará NULL para '{db_col}'")
                     warnings.append(f"Columna no encontrada en archivo: {file_col} (se usará NULL para {db_col})")
             
             # Leer solo las columnas disponibles
@@ -109,6 +113,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
                 if col not in df.columns:
                     df[col] = pd.NA
         except Exception as e:
+            logger.error(f"Error leyendo hoja 'REGISTROS': {str(e)}")
             raise ValueError(f"Error leyendo hoja 'REGISTROS': {str(e)}")
 
         # =============================================================================
@@ -156,6 +161,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
             df.drop(columns=['VALOR INFRACCIÓN', 'VALOR INTERESES'], errors='ignore', inplace=True)
             
         except Exception as e:
+            logger.error(f"Error en cálculos de valor: {str(e)}")
             warnings.append(f"Error en cálculos de valor: {str(e)}")
             df['valor'] = np.nan
 
@@ -290,6 +296,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
         return df_procesado, df_errores, mensaje
 
     except Exception as e:
+        logger.error(f"Error en paso {current_step}: {str(e)}")
         error_msg = f"Error en paso {current_step}: {str(e)}"
         if 'df' in locals():
             return pd.DataFrame(), pd.DataFrame({'error': [error_msg]}), error_msg
