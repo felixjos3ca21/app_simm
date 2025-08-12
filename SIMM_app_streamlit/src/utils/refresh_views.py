@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-from src.database.postgres import get_connection, refresh_materialized_views
 from datetime import datetime
 import logging
 import time
 from argparse import ArgumentParser
+from src.database.postgres import get_connection, refresh_materialized_views
 
 # Configuración de logging
 logging.basicConfig(

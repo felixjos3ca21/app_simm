@@ -109,18 +109,6 @@ CREATE TABLE IF NOT EXISTS pagos_comparendos (
     id_registro VARCHAR(64) PRIMARY KEY
 );
 
--- Crear tabla ARCHIVOS_PROCESADOS_PAGOS
-CREATE TABLE IF NOT EXISTS archivos_procesados_pagos (
-    id SERIAL PRIMARY KEY,
-    nombre_archivo VARCHAR(255) NOT NULL,
-    ruta_archivo VARCHAR(500) NOT NULL,
-    tipo_archivo VARCHAR(20) NOT NULL,
-    fecha_procesamiento TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    registros_procesados INTEGER NOT NULL,
-    estado VARCHAR(20) NOT NULL,
-    hash_archivo VARCHAR(32) NOT NULL,
-    UNIQUE(ruta_archivo)
-);
 
 -- Crear tabla ARCHIVOS_PROCESADOS_PAGOS
 CREATE TABLE IF NOT EXISTS archivos_procesados_pagos (
@@ -220,9 +208,15 @@ CREATE INDEX IF NOT EXISTS idx_gestiones_numero_comparendo ON gestiones(numero_c
 CREATE INDEX IF NOT EXISTS idx_pagos_documento ON pagos(documento);
 CREATE INDEX IF NOT EXISTS idx_pagos_numero_comparendo ON pagos(nro_comparendo);
 
+
+
+
+
+
 -- Mensaje de confirmación
 DO $$
 BEGIN
     RAISE NOTICE 'Todas las tablas han sido creadas exitosamente en la base de datos %', current_database();
 END
 $$;
+

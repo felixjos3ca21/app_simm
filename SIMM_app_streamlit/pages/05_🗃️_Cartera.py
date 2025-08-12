@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from src.database.postgres import DatabaseManager
-from src.utils.fondo import set_background
+from SIMM_app_streamlit.assets.fondo import set_background
 from sqlalchemy import text
 from calendar import monthrange
 import io

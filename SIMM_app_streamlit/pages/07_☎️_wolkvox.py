@@ -5,7 +5,7 @@ from tkinter import Tk, filedialog
 from datetime import datetime
 from dotenv import load_dotenv
 from src.utils.data_ingestor_tip3 import DataIngestorTip3
-from src.utils.fondo import set_background
+from SIMM_app_streamlit.assets.fondo import set_background
 from src.utils.data_ingestor_camp_3 import DataIngestorCamp3
 from src.utils.data_ingestor_cdr5 import DataIngestorCDR5
 from src.utils.data_ingestor_ase2 import DataIngestorASE2

@@ -12,7 +12,7 @@ import streamlit as st
 from io import BytesIO
 import pandas as pd
 from src.database.postgres import get_connection
-from src.utils.fondo import set_background
+from SIMM_app_streamlit.assets.fondo import set_background
 
 
 sys.path.append(str(Path(__file__).parent))

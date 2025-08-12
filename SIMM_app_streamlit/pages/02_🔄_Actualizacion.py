@@ -9,7 +9,7 @@ from src.utils.limpieza_archivo import preparar_datos
 from src.utils.limpieza_sms import preparar_datos_sms
 from src.utils.limpieza_pagos import procesar_pagos
 from src.utils.limpieza_bases import preparar_datos_bases
-from src.utils.fondo import set_background
+from SIMM_app_streamlit.assets.fondo import set_background
 import logging
 
 logging.basicConfig(

@@ -1,5 +1,3 @@
-# fondo.py
-# fondo.py
 import streamlit as st
 import base64
 
@@ -18,5 +16,4 @@ def set_background(png_file_path):
     }}
     </style>
     """
-
     st.markdown(css, unsafe_allow_html=True)

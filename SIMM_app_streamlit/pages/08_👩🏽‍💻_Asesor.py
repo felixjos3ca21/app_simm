@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import logging
-from src.utils.fondo import set_background
+from SIMM_app_streamlit.assets.fondo import set_background
 import calendar
 
 # Configuración de página

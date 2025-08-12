@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 from functools import lru_cache
 import numpy as np
-from src.utils.fondo import set_background
+from SIMM_app_streamlit.assets.fondo import set_background
 
 # ==============================================================================
 # CONFIGURACIÓN DE ESTILOS MEJORADOS

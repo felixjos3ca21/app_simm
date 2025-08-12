@@ -1,0 +1,126 @@
+/* Título principal */
+.section-title {
+    background: linear-gradient(135deg, #58E32D 0%, #38A118 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 4rem;
+    margin: 30px 0 20px 0;
+    text-align: center;
+    font-weight: 800;
+}
+
+/* Botones */
+.stButton > button {
+    background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%);
+    color: #222 !important;
+    border: none;
+    border-radius: 25px;
+    padding: 12px 30px;
+    transition: all 0.3s ease;
+}
+.stButton > button:hover {
+    color: #222 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+/* Sidebar */
+[data-testid=stSidebar] {
+    background-color: #95d597 !important;
+}
+
+/* Métricas personalizadas */
+.metric-box {
+    background: #8bf5ff;
+    border-radius: 16px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(56, 161, 24, 0.08);
+    text-align: center;
+}
+.metric-title {
+    font-size: 1.1rem;
+    color: #388e3c;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+.metric-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #222;
+}
+
+/* Información de periodo */
+.period-info {
+    background: #e8f5e9;
+    border-radius: 10px;
+    padding: 0.7rem 1.2rem;
+    margin: 1rem 0;
+    font-size: 1.1rem;
+    color: #222;
+}
+
+/* Expander */
+div[data-testid="stExpander"] .st-expanderHeader {
+    color: #388e3c !important;
+    font-weight: bold;
+}
+div[data-testid="stExpander"] .st-expanderContent {
+    color: #1a237e !important;
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    background: #e8f5e9;
+    border-radius: 10px 10px 0 0;
+}
+.stTabs [data-baseweb="tab"] {
+    color: #388e3c;
+    font-weight: 600;
+}
+.stTabs [aria-selected="true"] {
+    background: #a5d6a7;
+    color: #222;
+}
+
+/* Dataframe */
+.stDataFrame {
+    background: #fff !important;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(56, 161, 24, 0.08);
+}
+
+/* Ajustes generales */
+.main-container {
+    padding: 2rem;
+}
+/* Selectbox: caja y menú desplegable */
+div[data-baseweb="select"] {
+    background: #18a102 !important;
+    border-radius: 10px !important;
+    border: 2px solid #04450c !important;
+    color: #222 !important;
+    font-size: 1.1rem !important;
+    min-height: 48px;
+}
+
+/* Botón de descarga */
+.stDownloadButton > button {
+    background: linear-gradient(120deg, #a5d6a7 0%, #388e3c 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 25px !important;
+    padding: 12px 30px !important;
+    font-weight: 700 !important;
+    font-size: 1.1rem !important;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(56, 161, 24, 0.08);
+}
+
+.stDownloadButton > button:hover {
+    background: linear-gradient(120deg, #388e3c 0%, #a5d6a7 100%) !important;
+    color: #222 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(56, 161, 24, 0.18);
+}
