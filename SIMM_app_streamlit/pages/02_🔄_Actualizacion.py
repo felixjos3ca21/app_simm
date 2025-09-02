@@ -9,7 +9,7 @@ from src.utils.limpieza_archivo import preparar_datos
 from src.utils.limpieza_sms import preparar_datos_sms
 from src.utils.limpieza_pagos import procesar_pagos
 from src.utils.limpieza_bases import preparar_datos_bases
-from SIMM_app_streamlit.assets.fondo import set_background
+from assets.fondo import set_background
 import logging
 
 logging.basicConfig(
@@ -29,10 +29,12 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 st.set_page_config(
     page_title="SIAMM - Carga y Actualización",
-    page_icon="src/utils/favicon-114x114.png",
+    page_icon="assets/images/favicon-114x114.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
 
 # Estilos CSS
 st.markdown("""
@@ -63,8 +65,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.image("src/utils/logo-andesbpo-359x143.png", width=150)
-set_background("src/utils/bg-seccion.png")
+st.image("assets/images/logo-andesbpo-359x143.png", width=150)
+set_background("assets/images/bg-seccion.png")
 
 # ==============================================================================
 # CLASE BASE: DataProcessor
@@ -331,6 +333,47 @@ class GestionesProcessor(DataProcessor):
             return pd.DataFrame(), pd.DataFrame({'error': [str(e)]}), str(e)
 
 class SMSProcessor(DataProcessor):
+    def actualizar_resultados(self):
+        """Actualiza la columna resultado en la base de datos si hay cambios y muestra estadísticas."""
+        if self.df_procesado is None or self.df_procesado.empty:
+            st.info("No hay datos procesados para actualizar resultados.")
+            return
+        engine = self.engine
+        df = self.df_procesado
+        id_col = self.config['id_column']
+        total_existentes = 0
+        total_actualizados = 0
+        total_ya_actualizados = 0
+        ids_actualizados = []
+        ids_ya_actualizados = []
+        with engine.connect() as conn:
+            for _, row in df.iterrows():
+                id_registro = row[id_col]
+                nuevo_resultado = row['resultado']
+                res = conn.execute(text(f"SELECT resultado FROM sms WHERE {id_col} = :id_registro"), {'id_registro': id_registro}).fetchone()
+                if res is not None:
+                    total_existentes += 1
+                    resultado_actual = res[0]
+                    if resultado_actual != nuevo_resultado:
+                        conn.execute(text(f"UPDATE sms SET resultado = :nuevo_resultado WHERE {id_col} = :id_registro"), {'nuevo_resultado': nuevo_resultado, 'id_registro': id_registro})
+                        total_actualizados += 1
+                        ids_actualizados.append(id_registro)
+                    else:
+                        total_ya_actualizados += 1
+                        ids_ya_actualizados.append(id_registro)
+        
+        if total_actualizados == 0:
+            st.warning("No se encontraron cambios en la columna 'resultado'.")
+        else:
+            st.balloons()
+
+        cols = st.columns(3)
+        cols[0].metric("✅ Registros", total_existentes)
+        cols[1].metric("🆕 Actualizados", total_actualizados)
+        cols[2].metric("📋 Ya actualizados", total_ya_actualizados)
+
+
+
     """Procesador específico para SMS"""
     
     def __init__(self, engine):
@@ -830,7 +873,6 @@ class StreamlitUI:
                 st.divider()
                 st.subheader("🚀 Carga de Datos")
                 st.info(f"Se cargarán {len(processor.nuevos)} registros nuevos")
-                
                 if st.button("✅ Confirmar e Iniciar Carga", type="primary"):
                     try:
                         if st.session_state.modulo_actual == "Carga de Pagos":
@@ -843,6 +885,11 @@ class StreamlitUI:
                     except Exception as e:
                         logger.error(f"Error en carga: {str(e)}")
                         st.error(f"Error en carga: {str(e)}")
+
+            # Botón para actualizar resultados de SMS si corresponde
+            if st.session_state.modulo_actual == "Carga de SMS" and hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
+                if st.button("🔄 Actualizar columna resultado"):
+                    processor.actualizar_resultados()
 
 # ==============================================================================
 # EJECUCIÓN PRINCIPAL

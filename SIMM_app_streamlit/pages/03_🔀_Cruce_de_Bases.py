@@ -12,7 +12,7 @@ import streamlit as st
 from io import BytesIO
 import pandas as pd
 from src.database.postgres import get_connection
-from SIMM_app_streamlit.assets.fondo import set_background
+from assets.fondo import set_background
 
 
 sys.path.append(str(Path(__file__).parent))
@@ -20,7 +20,7 @@ sys.path.append(str(Path(__file__).parent))
 # Configuración de la página
 st.set_page_config(
     page_title="SIAMM - Cruces de Bases",
-    page_icon="src/utils/favicon-114x114.png",
+    page_icon="assets/images/favicon-114x114.png",
     layout="wide"
 )
 
@@ -60,11 +60,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 # Logo y fondo
-st.image("src/utils/logo-andesbpo-359x143.png", width=150)
-set_background("src/utils/bg-seccion.png")
+st.image("assets/images/logo-andesbpo-359x143.png", width=150)
+set_background("assets/images/bg-seccion.png")
 
 # ==============================================
-# FUNCIONES DE DATOS
+# Cruce de pagos  y gestiones 
 # ==============================================
 @st.cache_data
 def get_total_records():
@@ -77,14 +77,14 @@ def get_total_records():
 
 total_registros = get_total_records()
 
-def ejecutar_cruce(df_input):
-    """Cruza los pagos con gestiones anteriores manteniendo estructura original"""
+def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
+    # ...existing code...
+    """Cruza los pagos con gestiones anteriores y agrega columna booleana si el nitcliente está en SMS en el rango"""
     conn = get_connection()
-    
     try:
         # 1. Preparar datos manteniendo estructura original
         df = df_input.copy()
-        
+
         # Convertir fecha y validar
         df['fechapago'] = pd.to_datetime(df['fechapago'], dayfirst=True, errors='coerce')
 
@@ -96,49 +96,74 @@ def ejecutar_cruce(df_input):
         # Ahora convertir a date (solo si pasó la validación)
         df['fechapago'] = df['fechapago'].dt.date
 
-        # 2. Cruce por código cliente
+        # 2. Cruce por código cliente (dentro del rango de fechas)
         query_cod = """
             SELECT DISTINCT ON (identificador_infraccion)
                 identificador_infraccion AS codcliente,
                 fecha_gestion_sencilla AS fecha_gestion_cod,
                 id_gestion AS id_gestion_cod,
                 resultado AS resultado_cod,
-                archivo_origen AS archivo_cod
+                archivo_origen AS archivo_cod,
+                tipo_llamada AS tipollamada_cod,
+                tipo_chat AS tipo_chat_cod
             FROM gestiones
             WHERE identificador_infraccion = %s
-            AND fecha_gestion_sencilla <= %s
+            AND fecha_gestion_sencilla BETWEEN %s AND %s
             ORDER BY identificador_infraccion, fecha_gestion_sencilla DESC
         """
-        
-        # 3. Cruce por NIT
+
+        # 3. Cruce por NIT (dentro del rango de fechas)
         query_nit = """
             SELECT DISTINCT ON (documento)
                 documento AS nitcliente,
                 fecha_gestion_sencilla AS fecha_gestion_nit,
                 id_gestion AS id_gestion_nit,
                 resultado AS resultado_nit,
-                archivo_origen AS archivo_nit
+                archivo_origen AS archivo_nit,
+                tipo_llamada AS tipollamada_nit,
+                tipo_chat AS tipo_chat_nit
             FROM gestiones
             WHERE documento = %s
-            AND fecha_gestion_sencilla<= %s
+            AND fecha_gestion_sencilla BETWEEN %s AND %s
             ORDER BY documento, fecha_gestion_sencilla DESC
         """
 
-        # 4. Realizar cruces manteniendo índice original
+
+        # 4. Obtener nits únicos y codclientes únicos para consultar en SMS en el rango
+        nits_unicos = df['nitcliente'].dropna().astype(str).unique().tolist()
+        cods_unicos = df['codcliente'].dropna().astype(str).unique().tolist()
+
+        # Buscar por documento (nitcliente)
+        query_sms_nit = """
+            SELECT DISTINCT documento FROM sms
+            WHERE documento = ANY(%s) AND fecha_sms BETWEEN %s AND %s
+        """
+        # Buscar por numero_infraccion (codcliente)
+        query_sms_cod = """
+            SELECT DISTINCT numero_comparendo FROM sms
+            WHERE numero_comparendo = ANY(%s) AND fecha_sms BETWEEN %s AND %s
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query_sms_nit, (nits_unicos, fecha_inicio, fecha_fin))
+            nits_sms = set(row[0] for row in cursor.fetchall())
+            cursor.execute(query_sms_cod, (cods_unicos, fecha_inicio, fecha_fin))
+            cods_sms = set(row[0] for row in cursor.fetchall())
+
+        # 5. Realizar cruces manteniendo índice original
         resultados = []
         with conn.cursor() as cursor:
             for idx, row in df.iterrows():
                 # Cruce por código cliente
-                cursor.execute(query_cod, (str(row['codcliente']), row['fechapago']))
+                cursor.execute(query_cod, (str(row['codcliente']), fecha_inicio, fecha_fin))
                 gestion_cod = cursor.fetchone()
-                
+
                 # Si no hay coincidencia, buscar por NIT
                 if not gestion_cod:
-                    cursor.execute(query_nit, (str(row['nitcliente']), row['fechapago']))
+                    cursor.execute(query_nit, (str(row['nitcliente']), fecha_inicio, fecha_fin))
                     gestion_nit = cursor.fetchone()
                 else:
                     gestion_nit = None
-                
+
                 # Construir registro resultante
                 registro = row.to_dict()
                 if gestion_cod:
@@ -146,29 +171,109 @@ def ejecutar_cruce(df_input):
                         'fecha_gestion_cod': gestion_cod[1],
                         'id_gestion_cod': gestion_cod[2],
                         'resultado_cod': gestion_cod[3],
-                        'archivo_cod': gestion_cod[4]
+                        'archivo_cod': gestion_cod[4],
+                        'tipollamada_cod': gestion_cod[5],
+                        'tipo_chat_cod': gestion_cod[6]
                     })
                 if gestion_nit:
                     registro.update({
                         'fecha_gestion_nit': gestion_nit[1],
                         'id_gestion_nit': gestion_nit[2],
                         'resultado_nit': gestion_nit[3],
-                        'archivo_nit': gestion_nit[4]
+                        'archivo_nit': gestion_nit[4],
+                        'tipollamada_nit': gestion_nit[5],
+                        'tipo_chat_nit': gestion_nit[6]
                     })
-                
+
+                # Agregar columna booleana si el nitcliente está en SMS
+                registro['sms_enviado'] = str(row['nitcliente']) in nits_sms
+                # Agregar columna booleana si el codcliente está en SMS como numero_infraccion
+                registro['sms_enviado_codcliente'] = str(row['codcliente']) in cods_sms
+
                 resultados.append(registro)
 
-        # 5. Crear DataFrame final
+        # 6. Crear DataFrame final
         df_final = pd.DataFrame(resultados)
-        
+
+        # 7. Cruce con tabla bases: para cada pago, buscar el registro más reciente de bases por nitcliente/documento
+        query_bases = """
+            SELECT documento, base, fecha_entrega
+            FROM bases
+            WHERE documento = ANY(%s)
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query_bases, (nits_unicos,))
+            bases_rows = cursor.fetchall()
+            bases_cols = [desc[0] for desc in cursor.description]
+            df_bases = pd.DataFrame(bases_rows, columns=bases_cols)
+        if not df_bases.empty:
+            df_bases['fecha_entrega'] = pd.to_datetime(df_bases['fecha_entrega'])
+            # Para cada documento, quedarnos con el registro más reciente
+            df_bases = df_bases.sort_values('fecha_entrega', ascending=False).drop_duplicates('documento', keep='first')
+            df_bases = df_bases.rename(columns={'documento': 'nitcliente', 'base': 'base_cartera', 'fecha_entrega': 'fecha_entrega_cartera'})
+            df_final = df_final.merge(df_bases[['nitcliente', 'base_cartera', 'fecha_entrega_cartera']], on='nitcliente', how='left')
+        else:
+            df_final['base_cartera'] = None
+            df_final['fecha_entrega_cartera'] = None
+
         # Ordenar columnas: originales + nuevas
         original_cols = df.columns.tolist()
         nuevas_cols = [
-            'fecha_gestion_cod', 'id_gestion_cod', 'resultado_cod', 'archivo_cod',
-            'fecha_gestion_nit', 'id_gestion_nit', 'resultado_nit', 'archivo_nit'
+            'fecha_gestion_cod', 'id_gestion_cod', 'resultado_cod', 'archivo_cod', 'tipollamada_cod', 'tipo_chat_cod',
+            'fecha_gestion_nit', 'id_gestion_nit', 'resultado_nit', 'archivo_nit', 'tipollamada_nit', 'tipo_chat_nit',
+            'sms_enviado', 'sms_enviado_codcliente',
+            'base_cartera', 'fecha_entrega_cartera',
+            'base_cartera_cod', 'fecha_entrega_cartera_cod'
         ]
-        
-        return df_final[original_cols + nuevas_cols]
+
+
+        # 8. Cruce adicional: buscar en bases por codcliente <-> numero_comparendo
+        cods_unicos = df['codcliente'].dropna().astype(str).unique().tolist()
+        query_bases_cod = """
+            SELECT numero_comparendo, base, fecha_entrega
+            FROM bases
+            WHERE numero_comparendo = ANY(%s)
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query_bases_cod, (cods_unicos,))
+            bases_cod_rows = cursor.fetchall()
+            bases_cod_cols = [desc[0] for desc in cursor.description]
+            df_bases_cod = pd.DataFrame(bases_cod_rows, columns=bases_cod_cols)
+        if not df_bases_cod.empty:
+            df_bases_cod['fecha_entrega'] = pd.to_datetime(df_bases_cod['fecha_entrega'])
+            df_bases_cod = df_bases_cod.sort_values('fecha_entrega', ascending=False).drop_duplicates('numero_comparendo', keep='first')
+            df_bases_cod = df_bases_cod.rename(columns={'numero_comparendo': 'codcliente', 'base': 'base_cartera_cod', 'fecha_entrega': 'fecha_entrega_cartera_cod'})
+            df_final = df_final.merge(df_bases_cod[['codcliente', 'base_cartera_cod', 'fecha_entrega_cartera_cod']], on='codcliente', how='left')
+        else:
+            df_final['base_cartera_cod'] = None
+            df_final['fecha_entrega_cartera_cod'] = None
+
+        # 9. Crear columnas únicas finales por cruce (gestion_final, sms_final, base_final, tipollamada_final, tipo_chat_final)
+        # GESTION FINAL: prioriza gestion_cod, si no hay usa gestion_nit
+        df_final['fecha_gestion_final'] = df_final['fecha_gestion_cod'].combine_first(df_final['fecha_gestion_nit'])
+        df_final['id_gestion_final'] = df_final['id_gestion_cod'].combine_first(df_final['id_gestion_nit'])
+        df_final['resultado_final'] = df_final['resultado_cod'].combine_first(df_final['resultado_nit'])
+        df_final['archivo_final'] = df_final['archivo_cod'].combine_first(df_final['archivo_nit'])
+        # TIPO LLAMADA FINAL: prioriza tipollamada_cod, si no hay usa tipollamada_nit
+        df_final['tipollamada_final'] = df_final['tipollamada_cod'].combine_first(df_final['tipollamada_nit'])
+        # TIPO CHAT FINAL: prioriza tipo_chat_cod, si no hay usa tipo_chat_nit
+        df_final['tipo_chat_final'] = df_final['tipo_chat_cod'].combine_first(df_final['tipo_chat_nit'])
+
+        # SMS FINAL: prioriza sms_enviado_codcliente, si no hay usa sms_enviado
+        df_final['sms_final'] = df_final['sms_enviado_codcliente']
+        df_final.loc[df_final['sms_final'].isna(), 'sms_final'] = df_final['sms_enviado']
+
+        # BASE FINAL: prioriza base_cartera_cod, si no hay usa base_cartera
+        df_final['base_final'] = df_final['base_cartera_cod'].combine_first(df_final['base_cartera'])
+        df_final['fecha_entrega_final'] = df_final['fecha_entrega_cartera_cod'].combine_first(df_final['fecha_entrega_cartera'])
+
+        # Columnas finales únicas
+        columnas_finales = [
+            'fecha_gestion_final', 'id_gestion_final', 'resultado_final', 'archivo_final',
+            'tipollamada_final', 'tipo_chat_final',
+            'sms_final', 'base_final', 'fecha_entrega_final'
+        ]
+        return df_final[original_cols + nuevas_cols + columnas_finales]
 
     except Exception as e:
         st.error(f"Error en el cruce: {str(e)}")
@@ -200,39 +305,52 @@ def descargar_excel(dfs_dict):
         for sheet_name, df in dfs_dict.items():
             df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
     return output.getvalue()
+
 def mostrar_vista_cruce():
     st.header("🔀 Cruce de Datos Pagos Vs Gestiones")
     
     col1, col2 = st.columns([1, 2])
     
+
     with col1:
         uploaded_file = st.file_uploader("Subir Excel con pagos", type=["xlsx"])
-        
         if uploaded_file:
             try:
                 # Leer archivo SIN dayfirst
                 df = pd.read_excel(uploaded_file)
-                
                 # Convertir fecha después de leer
                 df['fechapago'] = pd.to_datetime(
                     df['fechapago'], 
                     dayfirst=True,  # Aquí sí es válido
                     errors='coerce'
                 )
-                
                 required_cols = ['codcliente', 'nitcliente', 'fechapago']
-                
                 if all(col in df.columns for col in required_cols):
+                    # Filtro de rango de fechas para gestiones
+                    hoy = datetime.now().date()
+                    default_fin = hoy
+                    default_ini = hoy - pd.Timedelta(days=6)
+                    st.info("Puedes filtrar las gestiones a buscar por un rango de fechas (por defecto últimos 7 días)")
+                    fecha_gestiones = st.date_input(
+                        "Selecciona el rango de fechas de gestiones a buscar",
+                        value=(default_ini, default_fin),
+                        min_value=hoy.replace(year=hoy.year-5),
+                        max_value=hoy,
+                        format="DD/MM/YYYY"
+                    )
+                    if isinstance(fecha_gestiones, tuple) and len(fecha_gestiones) == 2:
+                        fecha_inicio, fecha_fin = fecha_gestiones
+                    else:
+                        fecha_inicio = default_ini
+                        fecha_fin = default_fin
                     if st.button("Ejecutar cruce de datos"):
                         with st.spinner("Buscando gestiones anteriores..."):
-                            resultado = ejecutar_cruce(df)
-                            
+                            resultado = ejecutar_cruce(df, fecha_inicio, fecha_fin)
                             if resultado is not None:
                                 st.session_state.cruce_resultado = resultado
                                 st.rerun()
                 else:
                     st.error("Faltan columnas requeridas")
-
             except Exception as e:
                 st.error(f"Error: {str(e)}")
 
@@ -260,12 +378,11 @@ def mostrar_vista_cruce():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
+
+
 # ==============================================
 # Logica para el status de bases
 # ==============================================
-
-
-
 
 
 def mostrar_status_bases():
@@ -285,30 +402,37 @@ def mostrar_status_bases():
     bases_disponibles = df_bases[df_bases['fecha_entrega'] == fecha_seleccionada]['base'].unique()
     base_seleccionada = st.selectbox("📂 Seleccionar base", bases_disponibles)
 
-    # 3. Filtrar documentos de la base seleccionada (esto es liviano, lo mantenemos)
+    # 3. Filtrar documentos de la base seleccionada 
     df_base_filtrada = df_bases[
         (df_bases['fecha_entrega'] == fecha_seleccionada) &
         (df_bases['base'] == base_seleccionada)
     ].drop_duplicates(subset='documento')
 
-    # 4. Determinar rango de fechas (también liviano)
-    fecha_actual = datetime.now().date()
-    fecha_seleccionada_dt = pd.to_datetime(fecha_seleccionada)
-    
-    if fecha_actual.day <= 7:
-        ultimo_dia_mes_anterior = fecha_seleccionada_dt.replace(day=1) - pd.Timedelta(days=1)
-        fecha_inicio = ultimo_dia_mes_anterior - pd.Timedelta(days=6)
-        fecha_fin = fecha_seleccionada_dt.replace(day=fecha_actual.day)
+    # 4. Determinar rango de fechas de la base (solo informativo)
+    fecha_seleccionada_dt = pd.to_datetime(fecha_seleccionada).date()
+    st.info(f"📦 Fecha de entrega de la base: {fecha_seleccionada_dt.strftime('%d/%m/%Y')}")
+
+    # 5. Filtro de rango de fechas para gestiones
+    hoy = datetime.now().date()
+    default_fin = hoy
+    default_ini = hoy - pd.Timedelta(days=6)
+    fecha_gestiones = st.date_input(
+        "Selecciona el rango de fechas de gestiones a analizar",
+        value=(default_ini, default_fin),
+        min_value=fecha_seleccionada_dt.replace(year=fecha_seleccionada_dt.year-5),
+        max_value=hoy,
+        format="DD/MM/YYYY"
+    )
+    if isinstance(fecha_gestiones, tuple) and len(fecha_gestiones) == 2:
+        fecha_inicio, fecha_fin = fecha_gestiones
     else:
-        fecha_inicio = fecha_seleccionada_dt.replace(day=1)
-        fecha_fin = fecha_seleccionada_dt
-    
-    st.info(f"🔍 Rango de búsqueda: {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}")
+        fecha_inicio = default_ini
+        fecha_fin = default_fin
+    st.info(f"🔍 Rango de búsqueda de gestiones: {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}")
 
     # ===== NUEVO BOTÓN DE BÚSQUEDA =====
     if st.button("🔍 Ejecutar Búsqueda", type="primary"):
         with st.spinner("Buscando datos..."):
-            # 5. Consultas pesadas (solo se ejecutan al hacer clic)
             documentos = df_base_filtrada['documento'].tolist()
             fecha_fin_ajustada = fecha_fin + pd.Timedelta(hours=23, minutes=59, seconds=59)
 
@@ -418,16 +542,17 @@ def mostrar_status_bases():
                 df_sms,
                 on='documento',
                 how='left'
-            ).fillna({
-                'ultimo_resultado': 'Sin gestión',
-                'asesor_ultimo': 'N/A',
-                'fecha_ultima_gestion': pd.NaT,
-                'resultado_positivo': 'Sin gestión',
-                'asesor_positivo': 'N/A',
-                'fecha_gestion_positiva': pd.NaT,
-                'total_gestiones': 0,
-                'total_sms': 0
-            })
+            )
+
+            # Rellenar valores para documentos sin gestiones en el rango
+            df_resultado['ultimo_resultado'] = df_resultado['ultimo_resultado'].fillna('Sin gestiones en rango')
+            df_resultado['asesor_ultimo'] = df_resultado['asesor_ultimo'].fillna('N/A')
+            df_resultado['fecha_ultima_gestion'] = df_resultado['fecha_ultima_gestion'].fillna(pd.NaT)
+            df_resultado['resultado_positivo'] = df_resultado['resultado_positivo'].fillna('Sin gestiones en rango')
+            df_resultado['asesor_positivo'] = df_resultado['asesor_positivo'].fillna('N/A')
+            df_resultado['fecha_gestion_positiva'] = df_resultado['fecha_gestion_positiva'].fillna(pd.NaT)
+            df_resultado['total_gestiones'] = df_resultado['total_gestiones'].fillna(0)
+            df_resultado['total_sms'] = df_resultado['total_sms'].fillna(0)
 
             # 7. Ordenar columnas y datos
             column_order = [
@@ -443,7 +568,7 @@ def mostrar_status_bases():
             
             # Calcular métricas clave
             n_documentos = len(df_resultado)
-            n_con_gestion = len(df_resultado[df_resultado['ultimo_resultado'] != 'Sin gestión'])
+            n_con_gestion = len(df_resultado[df_resultado['ultimo_resultado'] != 'Sin gestiones en rango'])
             docs_sin_gestion = n_documentos - n_con_gestion
             total_gestiones = int(df_resultado['total_gestiones'].sum())  
             total_sms = int(df_resultado['total_sms'].sum())              
@@ -458,7 +583,7 @@ def mostrar_status_bases():
             asesores_unicos.discard('N/A')
             n_asesores = len(asesores_unicos)
 
-             # Función para renderizar tarjetas KPI
+            # Función para renderizar tarjetas KPI
             def render_kpi(icon, label, value, color="#ffffff", text_color="#000000"):
                 st.markdown(f"""
                     <div style="padding: 1rem; margin-bottom: 1rem; background-color: {color}; 
@@ -474,7 +599,7 @@ def mostrar_status_bases():
             
             with col1:
                 render_kpi("📄", "Total Registros", n_documentos, "#e8f5e9")
-                render_kpi("📉", "Sin Gestión", docs_sin_gestion, "#e8f5e9")
+                render_kpi("📉", "Sin Gestión en Rango", docs_sin_gestion, "#e8f5e9")
             
             with col2:
                 render_kpi("📞", "Cantidad de Gestiones", total_gestiones, "#e8f5e9")
@@ -483,7 +608,6 @@ def mostrar_status_bases():
             with col3:
                 render_kpi("✉️", "SMS Enviados", total_sms, "#e8f5e9")
                 render_kpi("👥", "Asesores", n_asesores if n_asesores > 0 else "N/A", "#e8f5e9")
-            
 
             st.subheader(f"📋 Resultados para base '{base_seleccionada}'")
             st.dataframe(
