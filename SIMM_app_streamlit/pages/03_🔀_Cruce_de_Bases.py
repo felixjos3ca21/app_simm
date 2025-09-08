@@ -66,16 +66,6 @@ set_background("assets/images/bg-seccion.png")
 # ==============================================
 # Cruce de pagos  y gestiones 
 # ==============================================
-@st.cache_data
-def get_total_records():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM gestiones")
-    total = cursor.fetchone()[0]
-    conn.close()
-    return total
-
-total_registros = get_total_records()
 
 def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
     # ...existing code...
@@ -95,6 +85,8 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
 
         # Ahora convertir a date (solo si pasó la validación)
         df['fechapago'] = df['fechapago'].dt.date
+
+        df = df[df['fechapago'] >= '2025-08-01']
 
         # 2. Cruce por código cliente (dentro del rango de fechas)
         query_cod = """
@@ -200,9 +192,10 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
             SELECT documento, base, fecha_entrega
             FROM bases
             WHERE documento = ANY(%s)
+            AND fecha_entrega BETWEEN %s AND %s
         """
         with conn.cursor() as cursor:
-            cursor.execute(query_bases, (nits_unicos,))
+            cursor.execute(query_bases, (nits_unicos, fecha_inicio, fecha_fin))
             bases_rows = cursor.fetchall()
             bases_cols = [desc[0] for desc in cursor.description]
             df_bases = pd.DataFrame(bases_rows, columns=bases_cols)
@@ -233,9 +226,10 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
             SELECT numero_comparendo, base, fecha_entrega
             FROM bases
             WHERE numero_comparendo = ANY(%s)
+            AND fecha_entrega BETWEEN %s AND %s
         """
         with conn.cursor() as cursor:
-            cursor.execute(query_bases_cod, (cods_unicos,))
+            cursor.execute(query_bases_cod, (cods_unicos, fecha_inicio, fecha_fin))
             bases_cod_rows = cursor.fetchall()
             bases_cod_cols = [desc[0] for desc in cursor.description]
             df_bases_cod = pd.DataFrame(bases_cod_rows, columns=bases_cod_cols)
@@ -266,6 +260,25 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         # BASE FINAL: prioriza base_cartera_cod, si no hay usa base_cartera
         df_final['base_final'] = df_final['base_cartera_cod'].combine_first(df_final['base_cartera'])
         df_final['fecha_entrega_final'] = df_final['fecha_entrega_cartera_cod'].combine_first(df_final['fecha_entrega_cartera'])
+        # Si base_final queda vacía, poner 'Sin Base Asociada'
+        df_final['base_final'] = df_final['base_final'].fillna('Sin Base Asociada')
+
+
+        # Llenar vacíos en resultado_final y tipollamada_final con 'Envio de SMS'
+        df_final['resultado_final'] = df_final['resultado_final'].fillna('Envio de SMS')
+        df_final['tipollamada_final'] = df_final['tipollamada_final'].fillna('Envio de SMS')
+
+
+        # Si tipo_chat_final es 'Whatsapp' o 'Chat alcaldia', poner ese valor en tipollamada_final
+        mask_whatsapp = df_final['tipo_chat_final'].str.lower() == 'whatsapp'
+        mask_chat_alcaldia = df_final['tipo_chat_final'].str.lower() == 'chat alcaldia'
+        df_final.loc[mask_whatsapp, 'tipollamada_final'] = 'Whatsapp'
+        df_final.loc[mask_chat_alcaldia, 'tipollamada_final'] = 'Chat alcaldia'
+
+        # Si base_final es 'Sin Base Asociada' y tipollamada_final es 'Whatsapp', 'Chat alcaldia' o 'Entrante', poner ese valor en base_final
+        mask_sin_base = df_final['base_final'] == 'Sin Base Asociada'
+        mask_tllamada = df_final['tipollamada_final'].str.lower().isin(['whatsapp', 'chat alcaldia', 'entrante'])
+        df_final.loc[mask_sin_base & mask_tllamada, 'base_final'] = df_final.loc[mask_sin_base & mask_tllamada, 'tipollamada_final']
 
         # Columnas finales únicas
         columnas_finales = [
@@ -274,7 +287,6 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
             'sms_final', 'base_final', 'fecha_entrega_final'
         ]
         return df_final[original_cols + nuevas_cols + columnas_finales]
-
     except Exception as e:
         st.error(f"Error en el cruce: {str(e)}")
         return None
@@ -374,7 +386,7 @@ def mostrar_vista_cruce():
             st.download_button(
                 label="Descargar resultados",
                 data=excel_buffer.getvalue(),
-                file_name="cruce_gestiones.xlsx",
+                file_name=f"Análisis Pagos Vs Gestiones y cartera {hoy}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 

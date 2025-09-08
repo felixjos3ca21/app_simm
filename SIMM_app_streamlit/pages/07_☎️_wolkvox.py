@@ -5,7 +5,7 @@ from tkinter import Tk, filedialog
 from datetime import datetime
 from dotenv import load_dotenv
 from src.utils.data_ingestor_tip3 import DataIngestorTip3
-from SIMM_app_streamlit.assets.fondo import set_background
+from assets.fondo import set_background
 from src.utils.data_ingestor_camp_3 import DataIngestorCamp3
 from src.utils.data_ingestor_cdr5 import DataIngestorCDR5
 from src.utils.data_ingestor_ase2 import DataIngestorASE2
@@ -47,9 +47,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Logo y fondo
-st.image("src/utils/logo-andesbpo-359x143.png", width=150)
-set_background("src/utils/bg-seccion.png")
-
+st.image("assets/images/logo-andesbpo-359x143.png", width=150)
+set_background("assets/images/bg-seccion.png")
 # Cargar variables de entorno
 load_dotenv()
 
