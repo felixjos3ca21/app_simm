@@ -6,41 +6,31 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import logging
-from SIMM_app_streamlit.assets.fondo import set_background
+from assets.fondo import set_background
 import calendar
+import pathlib
 
-# Configuración de página
+# ==============================================================================
+# CONFIGURACIÓN INICIAL
+# ==============================================================================
 st.set_page_config(
     page_title="SIAMM - Consulta Asesores",
-    page_icon="src/utils/favicon-114x114.png",
+    page_icon="assets/images/favicon-114x114.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS (consistentes con 07_wolkvox)
-st.markdown("""
-    <style>
-    [data-testid=stSidebar] { background: #a5d6a7 !important; padding: 20px 10px; }
-    .main-container { padding: 2rem; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; }
-    .metric-card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); margin: 10px 0; transition: transform 0.3s ease; }
-    .metric-card:hover { transform: translateY(-5px); }
-    .section-title { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2rem; margin: 30px 0 20px 0; text-align: center; }
-    .section-header { color: #2e7d32; border-bottom: 2px solid #a5d6a7; padding-bottom: 0.5rem; margin-bottom: 1rem; }
-    .stButton > button { background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%); color: white; border: none; border-radius: 25px; padding: 12px 30px; transition: all 0.3s ease; }
-    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
-    .stProgress > div > div > div > div { background-color: #2e7d32; }
-    .sidebar-title { color: #2c3e50; font-size: 1.2rem; margin-bottom: 1rem; font-weight: 600; }
-    .success-box { background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; margin: 10px 0; }
-    .error-box { background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; margin: 10px 0; }
-    .info-box { background: #d1ecf1; border: 1px solid #b3d4d8; border-radius: 8px; padding: 15px; margin: 10px 0; }
-    .dataframe { width: 100%; }
-    .warning-box { background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 10px 0; color: #856404; }
-    </style>
-""", unsafe_allow_html=True)
+# Cargar CSS global si existe
+css_path = pathlib.Path("assets/css/global.css")
+if css_path.exists():
+    with open(css_path, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # Logo y fondo
-st.image("src/utils/logo-andesbpo-359x143.png", width=150)
-set_background("src/utils/bg-seccion.png")
+st.image("assets/images/logo-andesbpo-359x143.png", width=350)
+set_background("assets/images/bg-seccion.png")
+
+# ==============================================================================
 
 # Cargar variables de entorno
 load_dotenv()
@@ -236,7 +226,7 @@ def create_pivot_table(df, agent_filter=None):
 
 def main():
     """Función principal de la aplicación"""
-    st.markdown("<h1 class='section-title'>👤 SIAMM - Consulta de Asesores</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='section-title'>👤 Consulta de Asesores</h1>", unsafe_allow_html=True)
     
     # Sidebar con módulos
     with st.sidebar:
@@ -325,7 +315,7 @@ def main():
         else:
             st.warning("No hay agentes disponibles")
             selected_agent = "Todos"
-    
+    st.markdown("""---""")
     # Crear tabla pivotada
     try:
         pivot_data = create_pivot_table(daily_df, selected_agent)

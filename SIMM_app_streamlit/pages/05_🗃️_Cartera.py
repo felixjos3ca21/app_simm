@@ -5,196 +5,32 @@ import plotly.graph_objects as go
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from src.database.postgres import DatabaseManager
-from SIMM_app_streamlit.assets.fondo import set_background
+from assets.fondo import set_background
 from sqlalchemy import text
 from calendar import monthrange
 import io
+import pathlib
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
 # ==============================================================================
+# Configuración de página
 st.set_page_config(
     page_title="SIAMM - Análisis de Cartera",
-    page_icon="src/utils/favicon-114x114.png",
+    page_icon="assets/images/favicon-114x114.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ==============================================================================
-# CONFIGURACIÓN DE ESTILOS MEJORADOS
-# ==============================================================================
-st.markdown("""
-    <style>
-    /* Sidebar mejorado */
-    [data-testid=stSidebar] {
-        background: #a5d6a7 !important;
-        padding: 20px 10px;
-    }
-    
-    [data-testid=stSidebar] .sidebar-content {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 20px;
-    }
-    
-    /* Contenedor principal */
-    .main-container {
-        padding: 2rem;
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        min-height: 100vh;
-    }
-    
-    /* Tarjetas de métricas */
-    .metric-card {
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        margin: 10px 0;
-        transition: transform 0.3s ease;
-    }
-    
-    .metric-card:hover {
-        transform: translateY(-5px);
-    }
-    
-    /* Títulos mejorados */
-    .section-title {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 2rem;
-        font-weight: bold;
-        margin: 30px 0 20px 0;
-        text-align: center;
-    }
-    
-    .section-header {
-        color: #2e7d32;
-        border-bottom: 2px solid #a5d6a7;
-        padding-bottom: 0.5rem;
-        margin-bottom: 1rem;
-    }
-    
-    /* Botones mejorados */
-    .stButton > button {
-        background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%);
-        color: white;
-        border: none;
-        border-radius: 25px;
-        padding: 12px 30px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-    }
-    
-    /* Alertas mejoradas */
-    .alert-success {
-        background: linear-gradient(135deg, #a8e6cf 0%, #7fcdcd 100%);
-        border-radius: 10px;
-        padding: 15px;
-        margin: 10px 0;
-    }
-    
-    .alert-warning {
-        background: linear-gradient(135deg, #ffd93d 0%, #ff6b6b 100%);
-        border-radius: 10px;
-        padding: 15px;
-        margin: 10px 0;
-    }
-    
-    /* Tabs mejorados */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 20px;
-        background: rgba(255,255,255,0.1);
-        border-radius: 25px;
-        padding: 5px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: transparent;
-        border-radius: 20px;
-        padding: 10px 20px;
-        font-weight: bold;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%);
-        color: white;
-    }
-    
-    /* Estilos para los filtros principales */
-    .main-filters {
-        background: rgba(255, 255, 255, 0.8);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        padding: 20px;
-        margin: 20px 0;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-    }
-    
-    /* Mejorar selectbox y inputs */
-    .stSelectbox > div > div > div {
-        background: white;
-        border-radius: 10px;
-    }
-    
-    .stDateInput > div > div > input {
-        background: white;
-        border-radius: 10px;
-        border: 2px solid #e0e0e0;
-    }
-    
-    .stRadio > div {
-        background: rgba(255, 255, 255, 0.5);
-        border-radius: 10px;
-        padding: 10px;
-    }
-    
-    /* Mejorar checkboxes */
-    .stCheckbox {
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 8px;
-        padding: 5px 10px;
-        margin: 5px 0;
-    }
-    
-    /* Estilos adicionales para mejor apariencia */
-    .stProgress > div > div > div > div {
-        background-color: #2e7d32;
-    }
-    
-    .stMarkdown {
-        margin-bottom: 2rem;
-    }
-    
-    /* Sidebar títulos */
-    .sidebar-title {
-        color: #2c3e50;
-        font-size: 1.2rem;
-        margin-bottom: 1rem;
-        font-weight: 600;
-    }
-    
-    .sidebar-instructions {
-        color: #4a5568;
-        font-size: 0.9rem;
-        line-height: 1.5;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Cargar CSS global si existe
+css_path = pathlib.Path("assets/css/global.css")
+if css_path.exists():
+    with open(css_path, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # Logo y fondo
-st.image("src/utils/logo-andesbpo-359x143.png", width=150)
-set_background("src/utils/bg-seccion.png")
+st.image("assets/images/logo-andesbpo-359x143.png", width=350)
+set_background("assets/images/bg-seccion.png")
 
 # ==============================================================================
 # CONEXIÓN A BASE DE DATOS
@@ -353,7 +189,7 @@ def mostrar_reporte():
 
     hoy = date.today()
     fecha_fin_default = fecha_min_max['max_fecha'].iloc[0]  # Eliminar .date() aquí
-
+    
     # Filtros de fecha con estilo mejorado
     col1, col2 = st.columns(2)
 
@@ -391,7 +227,7 @@ def mostrar_reporte():
         
         if not df_pendientes.empty:
             df_pendientes = procesar_datos(df_pendientes)
-    
+    st.markdown("""---""")
     # COMPROMISOS PENDIENTES
     if not df_pendientes.empty:
         st.markdown('<h3 class="section-header">🔴 Compromisos Pendientes</h3>', unsafe_allow_html=True)
@@ -755,8 +591,8 @@ def mostrar_descarga():
 # INTERFAZ PRINCIPAL
 # ==============================================================================
 def main():
-    st.title("💼 Análisis de Cartera")
-    
+    st.markdown("<h1 class='section-title'>💼 Análisis de Cartera </h1>", unsafe_allow_html=True)
+    st.markdown("---")
     # Sidebar para navegación
     with st.sidebar:
         

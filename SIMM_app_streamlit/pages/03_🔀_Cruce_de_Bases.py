@@ -13,54 +13,30 @@ from io import BytesIO
 import pandas as pd
 from src.database.postgres import get_connection
 from assets.fondo import set_background
-
+import pathlib
 
 sys.path.append(str(Path(__file__).parent))
 
-# Configuración de la página
+# ==============================================================================
+# CONFIGURACIÓN INICIAL
+# ==============================================================================
+
+# Configuración de página
 st.set_page_config(
-    page_title="SIAMM - Cruces de Bases",
+    page_title="SIAMM - Cruce de Datos",
     page_icon="assets/images/favicon-114x114.png",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.markdown("""
-    <style>
-    /* Sidebar */
-    [data-testid=stSidebar] {
-        background-color: #a5d6a7 !important;
-    }
-    .main-container {
-        padding: 2rem;
-            
-    /* Radio buttons */
-    div[role=radiogroup] {
-        gap: 0.5rem;
-    }
-    
-    /* Títulos */
-    .sidebar .sidebar-title {
-        color: #2c3e50;
-        font-size: 1.2rem;
-        margin-bottom: 1rem;
-        font-weight: 600;
-    }
-    
-    /* Instrucciones */
-    .sidebar-instructions {
-        color: #4a5568;
-        font-size: 0.9rem;
-        line-height: 1.5;
-    }
-    
-    /* Hover effects */
-    div[role=radiogroup] label:hover {
-        background-color: #e2e8f0 !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Cargar CSS global si existe
+css_path = pathlib.Path("assets/css/global.css")
+if css_path.exists():
+    with open(css_path, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 # Logo y fondo
-st.image("assets/images/logo-andesbpo-359x143.png", width=250)
+st.image("assets/images/logo-andesbpo-359x143.png", width=350)
 set_background("assets/images/bg-seccion.png")
 
 # ==============================================
@@ -322,8 +298,9 @@ def descargar_excel(dfs_dict):
     return output.getvalue()
 
 def mostrar_vista_cruce():
-    st.header("🔀 Cruce de Datos Pagos Vs Gestiones")
-    
+    st.markdown("<h1 class='section-title'> Cruce de Datos Pagos Vs Gestiones</h1>", unsafe_allow_html=True)
+
+
     col1, col2 = st.columns([1, 2])
     
 
