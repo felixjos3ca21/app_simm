@@ -60,7 +60,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 # Logo y fondo
-st.image("assets/images/logo-andesbpo-359x143.png", width=150)
+st.image("assets/images/logo-andesbpo-359x143.png", width=250)
 set_background("assets/images/bg-seccion.png")
 
 # ==============================================
@@ -68,8 +68,9 @@ set_background("assets/images/bg-seccion.png")
 # ==============================================
 
 def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
-    # ...existing code...
-    """Cruza los pagos con gestiones anteriores y agrega columna booleana si el nitcliente está en SMS en el rango"""
+    """
+    Cruza los pagos con gestiones anteriores y agrega columna booleana si el nitcliente está en SMS en el rango
+    """
     conn = get_connection()
     try:
         # 1. Preparar datos manteniendo estructura original
@@ -86,7 +87,9 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         # Ahora convertir a date (solo si pasó la validación)
         df['fechapago'] = df['fechapago'].dt.date
 
-        df = df[df['fechapago'] >= '2025-08-01']
+        from datetime import date
+        fecha_minima = date(2025, 8, 1)
+        df = df[df['fechapago'] >= fecha_minima]
 
         # 2. Cruce por código cliente (dentro del rango de fechas)
         query_cod = """

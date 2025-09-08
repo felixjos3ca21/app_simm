@@ -14,6 +14,8 @@
 .stButton > button {
     background: linear-gradient(120deg, #a5d6a7 0%, #2ecc71 100%);
     color: #222 !important;
+    font-size: 2.5rem;
+    font-weight: bold;
     border: none;
     border-radius: 25px;
     padding: 12px 30px;
