@@ -2,6 +2,7 @@ import streamlit as st
 from assets.fondo import set_background
 from src.database.postgres import DatabaseManager
 import pathlib
+from streamlit_option_menu import option_menu
 
 # ==============================================
 # CONFIGURACIÓN GLOBAL 
@@ -20,6 +21,7 @@ css_path = pathlib.Path("assets/css/global.css")
 if css_path.exists():
     with open(css_path, encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 
 # ==============================================
 # FUNCIONES AUXILIARES

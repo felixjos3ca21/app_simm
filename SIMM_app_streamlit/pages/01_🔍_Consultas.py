@@ -36,7 +36,7 @@ def modulo_gestiones():
     """Módulo para consultar la tabla de gestiones"""
     # Título
     st.markdown("<h1 class='section-title'> Consulta a la tabla Gestiones </h1>", unsafe_allow_html=True)
-
+    st.markdown("---")
     # Conexión
     conn = DatabaseManager.get_connection('SIMM')
 

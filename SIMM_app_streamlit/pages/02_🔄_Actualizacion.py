@@ -11,7 +11,11 @@ from src.utils.limpieza_pagos import procesar_pagos
 from src.utils.limpieza_bases import preparar_datos_bases
 from assets.fondo import set_background
 import logging
+import pathlib
 
+# ==============================================================================
+# CONFIGURACIÓN DEL LOGGING
+# ==============================================================================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -20,53 +24,32 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-
 logger = logging.getLogger(__name__)
-
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
 # ==============================================================================
 st.set_page_config(
-    page_title="SIAMM - Carga y Actualización",
+    page_title="SIAMM - Actualización",
     page_icon="assets/images/favicon-114x114.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Cargar CSS global
+css_path = pathlib.Path("assets/css/global.css")
+if css_path.exists():
+    with open(css_path, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-
-# Estilos CSS
-st.markdown("""
-    <style>
-    [data-testid=stSidebar] {
-        background-color: #a5d6a7 !important;
-    }
-    .main-container {
-        padding: 2rem;
-    }
-    div[role=radiogroup] {
-        gap: 0.5rem;
-    }
-    .sidebar .sidebar-title {
-        color: #2c3e50;
-        font-size: 1.2rem;
-        margin-bottom: 1rem;
-        font-weight: 600;
-    }
-    .sidebar-instructions {
-        color: #4a5568;
-        font-size: 0.9rem;
-        line-height: 1.5;
-    }
-    div[role=radiogroup] label:hover {
-        background-color: #e2e8f0 !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-st.image("assets/images/logo-andesbpo-359x143.png", width=150)
+# Logo y fondo
+st.image("assets/images/logo-andesbpo-359x143.png", width=350)
 set_background("assets/images/bg-seccion.png")
+
+st.markdown("<h1 class='section-title'>Actualización</h1>", unsafe_allow_html=True)
+
+st.markdown("---")
+
 
 # ==============================================================================
 # CLASE BASE: DataProcessor
@@ -689,6 +672,15 @@ def get_db_connection():
         st.error(f"❌ Error de conexión a la base de datos: {str(e)}")
         st.stop()
 
+def obtener_ultima_insercion(engine, tabla, columna_fecha="fecha_carga"):
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(f"SELECT MAX({columna_fecha}) FROM {tabla}"))
+            fecha = result.scalar()
+        return fecha
+    except Exception as e:
+        return None
+
 def verificar_duplicados(engine, df, table_name, id_column):
     """Verifica registros duplicados en la base de datos"""
     try:
@@ -749,7 +741,6 @@ class StreamlitUI:
             "Carga de Pagos": "💰",
             "Carga de Bases": "📋"
         }
-        
         with st.sidebar:
             st.header("Módulos Disponibles")
             
@@ -802,21 +793,31 @@ class StreamlitUI:
     def ejecutar(self):
         """Ejecuta la aplicación principal con correcciones"""
         self._mostrar_sidebar()
-        
-        if st.button("🔄 Limpiar todo"):
-            self._reset_upload_state()
-            st.rerun()
-            
-        if self._mostrar_carga_archivo():
-            files = st.session_state.uploaded_files
-            if not isinstance(files, list):
-                files = [files]
-                
-            st.success(f"✅ Archivo{'s' if len(files)>1 else ''} cargado{'s' if len(files)>1 else ''} correctamente")
-            
-            col1, col2 = st.columns([2, 3])
-            
-            with col1:
+        col1, col2, col3 = st.columns([1,6,1])
+        with col2:  
+            tabla_map = {
+                "Carga de Gestiones": "gestiones",
+                "Carga de SMS": "sms",
+                "Carga de Pagos": "pagos",
+                "Carga de Bases": "bases"
+            }
+            tabla = tabla_map.get(st.session_state.modulo_actual)
+            if tabla:
+                fecha = obtener_ultima_insercion(self.engine, tabla)
+                if fecha:
+                    st.info(f"Última Actualización en {tabla}: {fecha.strftime('%d/%m/%Y %H:%M') if hasattr(fecha, 'strftime') else fecha}")
+                else:
+                    st.info(f"No hay registros en {tabla}.")
+
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:    
+            if self._mostrar_carga_archivo():
+                files = st.session_state.uploaded_files
+                if not isinstance(files, list):
+                    files = [files]
+                    
+                st.success(f"✅ Archivo{'s' if len(files)>1 else ''} cargado{'s' if len(files)>1 else ''} correctamente")
+
                 st.subheader("⚙ Procesar Archivo")
                 if st.button("✅ Confirmar Procesar Archivo", type="primary"):
                     MODULO_PROCESSORS = {
@@ -849,47 +850,45 @@ class StreamlitUI:
     
     def _mostrar_resultados(self, processor):
         """Muestra los resultados del procesamiento"""
-        col1, col2 = st.columns([2, 3])
         
-        with col1:
-            st.subheader("📊 Resultados del Procesamiento")
-            
-            if hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
-                cols = st.columns(4)
-                cols[0].metric("✅ Válidos", len(processor.df_procesado))
-                cols[1].metric("🆕 Nuevos", len(getattr(processor, 'nuevos', pd.DataFrame())))
-                cols[2].metric("📋 Duplicados", getattr(processor, 'duplicados', 0))
-                cols[3].metric("❌ Errores", len(getattr(processor, 'df_errores', pd.DataFrame())))
-                # Imprimir estadísticas en el log
-                logger.info(
-                    f"Estadísticas procesamiento: "
-                    f"Válidos={len(processor.df_procesado)}, "
-                    f"Nuevos={len(getattr(processor, 'nuevos', pd.DataFrame()))}, "
-                    f"Duplicados={getattr(processor, 'duplicados', 0)}, "
-                    f"Errores={len(getattr(processor, 'df_errores', pd.DataFrame()))}"
-                )
-            
-            if hasattr(processor, 'nuevos') and len(processor.nuevos) > 0:
-                st.divider()
-                st.subheader("🚀 Carga de Datos")
-                st.info(f"Se cargarán {len(processor.nuevos)} registros nuevos")
-                if st.button("✅ Confirmar e Iniciar Carga", type="primary"):
-                    try:
-                        if st.session_state.modulo_actual == "Carga de Pagos":
-                            processor._cargar_todos_datos()
-                        else:
-                            processor._cargar_datos()
-                        st.success("✅ Datos cargados exitosamente")
-                        st.balloons()
-                        self._reset_upload_state()
-                    except Exception as e:
-                        logger.error(f"Error en carga: {str(e)}")
-                        st.error(f"Error en carga: {str(e)}")
+        st.subheader("📊 Resultados del Procesamiento")
+        
+        if hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
+            cols = st.columns(4)
+            cols[0].metric("✅ Válidos", len(processor.df_procesado))
+            cols[1].metric("🆕 Nuevos", len(getattr(processor, 'nuevos', pd.DataFrame())))
+            cols[2].metric("📋 Duplicados", getattr(processor, 'duplicados', 0))
+            cols[3].metric("❌ Errores", len(getattr(processor, 'df_errores', pd.DataFrame())))
+            # Imprimir estadísticas en el log
+            logger.info(
+                f"Estadísticas procesamiento: "
+                f"Válidos={len(processor.df_procesado)}, "
+                f"Nuevos={len(getattr(processor, 'nuevos', pd.DataFrame()))}, "
+                f"Duplicados={getattr(processor, 'duplicados', 0)}, "
+                f"Errores={len(getattr(processor, 'df_errores', pd.DataFrame()))}"
+            )
+        
+        if hasattr(processor, 'nuevos') and len(processor.nuevos) > 0:
+            st.divider()
+            st.subheader("🚀 Carga de Datos")
+            st.info(f"Se cargarán {len(processor.nuevos)} registros nuevos")
+            if st.button("✅ Confirmar e Iniciar Carga", type="primary"):
+                try:
+                    if st.session_state.modulo_actual == "Carga de Pagos":
+                        processor._cargar_todos_datos()
+                    else:
+                        processor._cargar_datos()
+                    st.success("✅ Datos cargados exitosamente")
+                    st.balloons()
+                    self._reset_upload_state()
+                except Exception as e:
+                    logger.error(f"Error en carga: {str(e)}")
+                    st.error(f"Error en carga: {str(e)}")
 
-            # Botón para actualizar resultados de SMS si corresponde
-            if st.session_state.modulo_actual == "Carga de SMS" and hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
-                if st.button("🔄 Actualizar columna resultado"):
-                    processor.actualizar_resultados()
+        # Botón para actualizar resultados de SMS si corresponde
+        if st.session_state.modulo_actual == "Carga de SMS" and hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
+            if st.button("🔄 Actualizar columna resultado"):
+                processor.actualizar_resultados()
 
 # ==============================================================================
 # EJECUCIÓN PRINCIPAL
