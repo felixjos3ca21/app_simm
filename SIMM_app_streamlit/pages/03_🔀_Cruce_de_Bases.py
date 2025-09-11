@@ -7,6 +7,7 @@ from src.database.postgres import get_connection
 from io import BytesIO
 import openpyxl
 import sys
+from streamlit_option_menu import option_menu
 from pathlib import Path
 import streamlit as st
 from io import BytesIO
@@ -376,8 +377,6 @@ def mostrar_vista_cruce():
 # ==============================================
 # Logica para el status de bases
 # ==============================================
-
-
 def mostrar_status_bases():
     st.markdown("<h1 class='section-title'> Resultados de cada Base por Gestión</h1>", unsafe_allow_html=True)
     st.markdown("---")
@@ -634,32 +633,39 @@ def mostrar_status_bases():
 # ==============================================
 # BARRA LATERAL - NAVEGACIÓN
 # ==============================================
-def sidebar_navegacion():
-    with st.sidebar:
-        st.header("Tipos de Cruces a la Base de Datos")
-        st.write("Selecciona el tipo de cruce que deseas realizar")
-        opcion = st.radio(
-            "Seleccionar módulo:",
-            options=[
-                "Cruce de Datos Pagos Vs. Gestiones",
-                "Status de Bases"
-            ],
-            label_visibility="collapsed"
-        )
-
-    return opcion
+def topbar_navegacion():
+    selected = option_menu(
+        menu_title=None,
+        options=[
+            "Cruce de Datos Pagos Vs. Gestiones",
+            "Status Bases General",
+            "Status de Bases"
+        ],
+        icons=["table", "bar-chart", "database"],
+        orientation="horizontal"
+    )
+    return selected
 # ==============================================
 # ESTRUCTURA PRINCIPAL
 # ==============================================
 def main():
-    opcion_seleccionada = sidebar_navegacion()
+    st.markdown("<h1 class='section-title'> Estado de Bases & Cruces</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+    opcion_seleccionada = topbar_navegacion()
     
     with st.container():
         if opcion_seleccionada == "Cruce de Datos Pagos Vs. Gestiones":
             mostrar_vista_cruce()
+        elif opcion_seleccionada == "Status Bases General":
+            mostrar_status_bases_general()
         elif opcion_seleccionada == "Status de Bases":
             mostrar_status_bases()
 
+
+def mostrar_status_bases_general():
+    st.markdown("<h1 class='section-title'>Status Bases General</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.info("Aquí irá la lógica de Status Bases General.")
 
 if __name__ == "__main__":
     main()

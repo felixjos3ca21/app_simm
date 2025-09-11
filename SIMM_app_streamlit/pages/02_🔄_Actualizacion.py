@@ -12,6 +12,7 @@ from src.utils.limpieza_bases import preparar_datos_bases
 from assets.fondo import set_background
 import logging
 import pathlib
+from streamlit_option_menu import option_menu
 
 # ==============================================================================
 # CONFIGURACIÓN DEL LOGGING
@@ -354,8 +355,6 @@ class SMSProcessor(DataProcessor):
         cols[0].metric("✅ Registros", total_existentes)
         cols[1].metric("🆕 Actualizados", total_actualizados)
         cols[2].metric("📋 Ya actualizados", total_ya_actualizados)
-
-
 
     """Procesador específico para SMS"""
     
@@ -733,38 +732,23 @@ class StreamlitUI:
         st.session_state.procesado = False
         st.session_state.processor = None
         
-    def _mostrar_sidebar(self):
-        """Muestra la barra lateral de navegación"""
+    def _mostrar_topbar(self):
+        """Muestra la barra de navegación superior con option menu"""
         MODULOS = {
             "Carga de Gestiones": "🧮",
             "Carga de SMS": "📲",
             "Carga de Pagos": "💰",
             "Carga de Bases": "📋"
         }
-        with st.sidebar:
-            st.header("Módulos Disponibles")
-            
-            # Usamos on_change para resetear el estado cuando cambia el módulo
-            modulo_seleccionado = st.radio(
-                "Seleccione el módulo:",
-                options=list(MODULOS.keys()),
-                index=list(MODULOS.keys()).index(st.session_state.modulo_actual),
-                format_func=lambda x: f"{MODULOS[x]} {x}",
-                key="modulo_radio",
-                on_change=self._reset_upload_state
-            )
-            
-            st.session_state.modulo_actual = modulo_seleccionado
-            
-            st.markdown("---")
-            st.markdown('<div class="sidebar-title">Instrucciones</div>', unsafe_allow_html=True)
-            st.markdown("""
-                <div class="sidebar-instructions">
-                1. Seleccione el módulo correspondiente<br>
-                2. Cargue el archivo <br>
-                3. Siga el proceso de validación
-                </div>
-            """, unsafe_allow_html=True)
+        modulo_seleccionado = option_menu(
+            menu_title=None,
+            options=list(MODULOS.keys()),
+            icons=["calculator", "chat", "cash-coin", "clipboard-data"],
+            orientation="horizontal"
+        )
+        if modulo_seleccionado != st.session_state.modulo_actual:
+            self._reset_upload_state()
+        st.session_state.modulo_actual = modulo_seleccionado
     
     def _mostrar_carga_archivo(self):
         """Componente de carga de archivo mejorado"""
@@ -792,7 +776,7 @@ class StreamlitUI:
     
     def ejecutar(self):
         """Ejecuta la aplicación principal con correcciones"""
-        self._mostrar_sidebar()
+        self._mostrar_topbar()
         col1, col2, col3 = st.columns([1,6,1])
         with col2:  
             tabla_map = {
@@ -815,7 +799,6 @@ class StreamlitUI:
                 files = st.session_state.uploaded_files
                 if not isinstance(files, list):
                     files = [files]
-                    
                 st.success(f"✅ Archivo{'s' if len(files)>1 else ''} cargado{'s' if len(files)>1 else ''} correctamente")
 
                 st.subheader("⚙ Procesar Archivo")
@@ -826,24 +809,19 @@ class StreamlitUI:
                         "Carga de Pagos": PagosProcessor,
                         "Carga de Bases": BasesProcessor
                     }
-                    
                     processor_class = MODULO_PROCESSORS.get(st.session_state.modulo_actual)
                     processor = processor_class(self.engine)
-                    
                     try:
                         if st.session_state.modulo_actual == "Carga de Pagos" and len(files) > 1:
                             success = processor.procesar_archivos_multiples(files)
                         else:
                             success = processor.procesar_archivo(files[0])
-                            
                         if success:
                             st.session_state.procesado = True
                             st.session_state.processor = processor
                             st.rerun()
-                            
                     except Exception as e:
                         st.error(f"Error al procesar: {str(e)}")
-            
             if st.session_state.procesado and st.session_state.processor:
                 processor = st.session_state.processor
                 self._mostrar_resultados(processor)
