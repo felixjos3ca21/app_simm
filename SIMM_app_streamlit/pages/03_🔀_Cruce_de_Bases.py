@@ -299,7 +299,7 @@ def descargar_excel(dfs_dict):
     return output.getvalue()
 
 def mostrar_vista_cruce():
-    st.markdown("<h1 class='section-title'> Cruce de Datos Pagos Vs Gestiones y Cartera</h1>", unsafe_allow_html=True)
+    st.header(" 📑 Cruce de Datos Pagos Vs Gestiones y Cartera")
     st.markdown("---")
 
     col1, col2, col3 = st.columns([1, 6, 1])
@@ -348,8 +348,8 @@ def mostrar_vista_cruce():
     with col2:
         
         if "cruce_resultado" in st.session_state:
-            st.header("  Resultados para el Análisis de Pagos Vs Gestiones y Cartera")
-            st.markdown("""---""")
+            st.header(" 🧮 Resultados para el Análisis de Pagos Vs Gestiones y Cartera")
+            
             df_resultado = st.session_state.cruce_resultado
             
             st.dataframe(
@@ -378,9 +378,8 @@ def mostrar_vista_cruce():
 # Logica para el status de bases
 # ==============================================
 def mostrar_status_bases():
-    st.markdown("<h1 class='section-title'> Resultados de cada Base por Gestión</h1>", unsafe_allow_html=True)
-    st.markdown("---")
-    #st.header("📊 Status de Bases vs Gestiones")
+    st.header(" 🧮 Resultados de cada Base por Gestiónes")
+    
     col1, col2, col3 = st.columns([1, 6, 1])
     with col2:
         conn = get_connection()
@@ -630,21 +629,113 @@ def mostrar_status_bases():
                 )
 
         conn.close()
+
+# ==============================================
+# Logica para el status de bases General
+# ==============================================
+
+def mostrar_status_bases_general():
+    st.header("📋 Estado de Bases en el mes vs Gestiones y SMS")
+    st.markdown("---")
+    conn = get_connection()
+    df_bases = pd.read_sql("SELECT documento, base, fecha_entrega FROM bases", conn)
+    df_bases['fecha_entrega'] = pd.to_datetime(df_bases['fecha_entrega'])
+    df_bases['mes'] = df_bases['fecha_entrega'].dt.to_period('M')
+    meses = sorted(df_bases['mes'].unique(), reverse=True)
+    mes_seleccionado = st.selectbox("Selecciona el mes de las bases recibidas", meses)
+    df_mes = df_bases[df_bases['mes'] == mes_seleccionado]
+    
+
+    # Agrupar por día y base
+    df_mes['dia'] = df_mes['fecha_entrega'].dt.date
+    resumen = df_mes.groupby(['dia', 'base']).agg(registros=('documento', 'count')).reset_index()
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.subheader("📊 Bases recibidas en el mes")
+        cols_miles = ['registros']
+        for col in cols_miles:
+            if col in resumen.columns:
+                resumen[col] = resumen[col].apply(lambda x: f"{int(x):,.0f}" if pd.notnull(x) else x)
+                resumen[col] = resumen[col].str.replace(",", ".")
+        st.dataframe(resumen, hide_index=True)
+    
+    with col2:
+        # Cruce de información por día y base (usando todo el mes seleccionado)
+        st.subheader("📋 Estado de cada base (Registros Únicos)")
+        with st.spinner("Consultando datos de gestiones y SMS..."):
+            fecha_inicio_mes = df_mes['fecha_entrega'].min()
+            fecha_fin_mes = df_mes['fecha_entrega'].max() + pd.Timedelta(hours=23, minutes=59, seconds=59)
+            resultados = []
+            for _, row in resumen.iterrows():
+                dia = row['dia']
+                base = row['base']
+                documentos_base = df_mes[(df_mes['dia'] == dia) & (df_mes['base'] == base)]['documento'].astype(str).str.strip().str.upper().unique().tolist()
+
+                # Consultar gestiones en todo el mes
+                query_gestiones = """
+                    SELECT documento, resultado, asesor FROM gestiones
+                    WHERE documento = ANY(%s) AND fecha_gestion BETWEEN %s AND %s
+                """
+                df_gestiones = pd.read_sql(query_gestiones, conn, params=(documentos_base, fecha_inicio_mes, fecha_fin_mes))
+                df_gestiones['documento'] = df_gestiones['documento'].astype(str).str.strip().str.upper()
+
+                # Consultar mensajes en todo el mes
+                query_sms = """
+                    SELECT documento FROM sms
+                    WHERE documento = ANY(%s) AND fecha_sms BETWEEN %s AND %s
+                """
+                df_sms = pd.read_sql(query_sms, conn, params=(documentos_base, fecha_inicio_mes, fecha_fin_mes))
+                df_sms['documento'] = df_sms['documento'].astype(str).str.strip().str.upper()
+
+                # KPIs
+                total_registros = len(documentos_base)
+                gestionados = df_gestiones['documento'].nunique()
+                no_gestionados = total_registros - gestionados
+                mensajes = df_sms['documento'].nunique()
+                con_acuerdo = df_gestiones[
+                    df_gestiones['resultado'].str.lower().str.contains('acuerdo') |
+                    df_gestiones['resultado'].str.lower().str.contains('compromiso')
+                ]['documento'].nunique()
+                asesores = df_gestiones['asesor'].nunique() if 'asesor' in df_gestiones.columns else 0
+
+                resultados.append({
+                    'Día': dia,
+                    'Base': base,
+                    'Registros': total_registros,
+                    'Gestionados': gestionados,
+                    'No Gestionados': no_gestionados,
+                    'Mensajes Enviados': mensajes,
+                    'Con Acuerdo': con_acuerdo,
+                    'Asesores': asesores
+                })
+
+            df_estado = pd.DataFrame(resultados)
+            # Formatear columnas numéricas con separador de miles
+            cols_miles = ['Registros', 'Gestionados', 'No Gestionados', 'Mensajes Enviados', 'Con Acuerdo', 'Asesores']
+            for col in cols_miles:
+                if col in df_estado.columns:
+                    df_estado[col] = df_estado[col].apply(lambda x: f"{int(x):,}".replace(",", ".") if pd.notnull(x) else x)
+            st.dataframe(df_estado, hide_index=True)
+        conn.close()
+
+
 # ==============================================
 # BARRA LATERAL - NAVEGACIÓN
 # ==============================================
+
 def topbar_navegacion():
     selected = option_menu(
         menu_title=None,
         options=[
             "Cruce de Datos Pagos Vs. Gestiones",
-            "Status Bases General",
+            "Status Bases Mes",
             "Status de Bases"
         ],
         icons=["table", "bar-chart", "database"],
         orientation="horizontal"
     )
     return selected
+
 # ==============================================
 # ESTRUCTURA PRINCIPAL
 # ==============================================
@@ -656,16 +747,10 @@ def main():
     with st.container():
         if opcion_seleccionada == "Cruce de Datos Pagos Vs. Gestiones":
             mostrar_vista_cruce()
-        elif opcion_seleccionada == "Status Bases General":
+        elif opcion_seleccionada == "Status Bases Mes":
             mostrar_status_bases_general()
         elif opcion_seleccionada == "Status de Bases":
             mostrar_status_bases()
-
-
-def mostrar_status_bases_general():
-    st.markdown("<h1 class='section-title'>Status Bases General</h1>", unsafe_allow_html=True)
-    st.markdown("---")
-    st.info("Aquí irá la lógica de Status Bases General.")
 
 if __name__ == "__main__":
     main()
