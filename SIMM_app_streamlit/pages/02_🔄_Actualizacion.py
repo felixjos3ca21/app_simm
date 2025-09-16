@@ -393,14 +393,30 @@ class PagosProcessor(DataProcessor):
             'table_name': 'pagos',
             'mapeo_columnas': {
                 'id_registro': 'id_registro',
-                'nro_acuerdo': 'nro_acuerdo',
-                'nro_comparendo': 'nro_comparendo',
-                'documento': 'documento',
-                'nombre_usuario': 'nombre_usuario',
-                'valor': 'valor',
-                'fecha_pago': 'fecha_pago',
+                'codcliente': 'codcliente',
+                'nitcliente': 'nitcliente',
+                'numobligacion': 'numobligacion',
+                'fechapago': 'fechapago',
+                'valorpago': 'valorpago',
+                'base': 'BASE',
+                'fecha_gest': 'FECHA GEST',
+                'aplica_pago_gestion': 'APLICA PAGO GESTIÓN',
+                'fecha_sms': 'FECHA SMS',
+                'campania': 'CAMPAÑA',
+                'aplica_pago_sms': 'APLICA PAGO SMS',
+                'aplicacion_final': 'APLICACIÓN FINAL',
+                'fecha_sencilla': 'FECHA SENCILLA',
+                'anio': 'AÑO',
+                'dia': 'DIA',
+                'mes': 'MES',
+                'semana': 'SEMANA',
+                'numero_mes': 'NÚMERO MES',
+                'nombre_dia_semana': 'NOMBRE DÍA SEMANA',
+                'cruce_sms': 'CRUCE SMS',
+                'estrategia': 'ESTRATEGIA',
+                'infraccion': 'INFRACCION',
+                'periodo_21_20': 'Período 21 al 20',
                 'archivo_origen': 'archivo_origen',
-                'identificador_infraccion': 'identificador_infraccion',
                 'fecha_carga': 'fecha_carga'
             },
             'id_column': 'id_registro',
@@ -412,17 +428,14 @@ class PagosProcessor(DataProcessor):
         self.df_resumen = pd.DataFrame()
         
     def _procesar_archivo(self, archivo):
-        """Implementación específica de limpieza para pagos"""
+        """Procesamiento de archivo Excel de pagos con la nueva lógica"""
         try:
-            # Validación adicional del tipo de archivo
-            if hasattr(archivo, 'name') and not archivo.name.lower().endswith('.txt'):
-                return pd.DataFrame(), pd.DataFrame({'error': ['El archivo debe ser .txt']}), "Formato inválido"
-            # Crear directorio temporal si no existe
+            # Validación: solo aceptar archivos Excel
+            if hasattr(archivo, 'name') and not archivo.name.lower().endswith(('.xlsx', '.xls')):
+                return pd.DataFrame(), pd.DataFrame({'error': ['El archivo debe ser .xlsx o .xls']}), "Formato inválido"
             temp_dir = os.path.join(tempfile.gettempdir(), "simm_pagos")
             os.makedirs(temp_dir, exist_ok=True)
-            
-            # Manejar tanto UploadedFile como rutas directas
-            if hasattr(archivo, 'name'):  
+            if hasattr(archivo, 'name'):
                 temp_path = os.path.join(temp_dir, archivo.name)
                 with open(temp_path, 'wb') as f:
                     f.write(archivo.getvalue())
@@ -430,36 +443,18 @@ class PagosProcessor(DataProcessor):
             else:
                 temp_path = archivo
                 nombre_archivo = os.path.basename(archivo)
-            
-            # Procesar el archivo usando la función utilitaria
+            # Procesar el archivo usando la nueva función
             df_procesado, df_errores, mensaje = procesar_pagos(temp_path, nombre_archivo)
-            
-            # Limpiar archivo temporal si lo creamos
             if hasattr(archivo, 'name'):
                 try:
                     os.unlink(temp_path)
                 except:
                     pass
-            
             if df_procesado.empty:
                 return pd.DataFrame(), df_errores, mensaje
-            
-            # Asegurar columnas requeridas
-            columnas_requeridas = [
-                'id_registro', 'nro_acuerdo', 'nro_comparendo', 'documento',
-                'nombre_usuario', 'valor', 'fecha_pago', 'archivo_origen',
-                'identificador_infraccion', 'fecha_carga'
-            ]
-            
-            for col in columnas_requeridas:
-                if col not in df_procesado.columns:
-                    df_procesado[col] = None
-            
             # Registrar archivo procesado
             self.archivos_procesados.append(nombre_archivo)
-            
             return df_procesado, df_errores, mensaje
-            
         except Exception as e:
             error_msg = f"Error procesando {getattr(archivo, 'name', archivo)}: {str(e)}"
             return pd.DataFrame(), pd.DataFrame({'error': [error_msg]}), error_msg
@@ -755,7 +750,7 @@ class StreamlitUI:
         MODULO_CONFIG = {
             "Carga de Gestiones": {"ext": ".xlsx", "multiple": False, "icon": "🧮"},
             "Carga de SMS": {"ext": ".xlsx", "multiple": False, "icon": "📲"},
-            "Carga de Pagos": {"ext": ".txt", "multiple": True, "icon": "💰"},
+            "Carga de Pagos": {"ext": ".xlsx", "multiple": False, "icon": "💰"},
             "Carga de Bases": {"ext": ".xlsx", "multiple": False, "icon": "📋"}
         }
         
