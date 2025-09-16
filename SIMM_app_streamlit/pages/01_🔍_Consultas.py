@@ -44,9 +44,22 @@ def modulo_gestiones():
     st.subheader("Conteo de id gestión únicos por rango de fechas")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
-        fecha_inicio = st.date_input("Fecha inicio", value=pd.to_datetime("2025-08-01").date())
-    with col4:
-        fecha_fin = st.date_input("Fecha fin", value=pd.to_datetime("2025-08-30").date())
+        hoy = date.today()
+        default_ini = hoy.replace(day=1)
+        default_fin = hoy
+
+        fecha_rango = st.date_input(
+            "Selecciona el rango de fechas a consultar",
+            value=(default_ini, default_fin),
+            min_value=hoy.replace(year=hoy.year-5),
+            max_value=hoy,
+            format="DD/MM/YYYY"
+        )
+        if isinstance(fecha_rango, tuple) and len(fecha_rango) == 2:
+            fecha_inicio, fecha_fin = fecha_rango
+        else:
+            fecha_inicio = default_ini
+            fecha_fin = default_fin
     
     
     if st.button("Consultar"):
@@ -250,11 +263,155 @@ def modulo_sms():
 # Logica para consultar a PAGOS
 #------------------------------------------------------------------
 def modulo_pagos():
-    # Lógica para Pagos
-    st.write("Aquí va la lógica de Pagos")
+    """Módulo para consultar la tabla de Pagos"""
+    st.markdown("<h1 class='section-title'> Consulta a la tabla PAGOS </h1>", unsafe_allow_html=True)
+    st.markdown("---")
+    conn = DatabaseManager.get_connection('SIMM')
 
+    st.subheader("Consulta de Pagos por rango de fechas")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    with col1:
+        hoy = date.today()
+        default_ini = hoy.replace(day=1)
+        default_fin = hoy
 
+        fecha_rango = st.date_input(
+            "Selecciona el rango de fechas a consultar",
+            value=(default_ini, default_fin),
+            min_value=hoy.replace(year=hoy.year-5),
+            max_value=hoy,
+            format="DD/MM/YYYY"
+        )
+        if isinstance(fecha_rango, tuple) and len(fecha_rango) == 2:
+            fecha_inicio, fecha_fin = fecha_rango
+        else:
+            fecha_inicio = default_ini
+            fecha_fin = default_fin
+        
+    if st.button("Consultar"):
+        with conn.cursor() as cur:
+            # Métricas principales
+            query_total = """
+            SELECT COUNT(*) AS conteo
+            FROM pagos
+            WHERE aplicacion_final = 'APLICA'
+            AND fecha_sencilla >= %s
+            AND fecha_sencilla <= %s;
+            """
+            cur.execute(query_total, (fecha_inicio, fecha_fin))
+            total_registros = cur.fetchone()[0]
 
+            # Métricas principales
+            query_valor = """
+            SELECT sum(valorpago) AS valor
+            FROM pagos
+            WHERE aplicacion_final = 'APLICA'
+            AND fecha_sencilla >= %s
+            AND fecha_sencilla <= %s;
+            """
+            cur.execute(query_valor, (fecha_inicio, fecha_fin))
+            total_valor = cur.fetchone()[0]
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"<div class='metric-box'><div class='metric-title'>Cantidad de Pagos en el Período </div><div class='metric-value'>{total_registros:,}".replace(",", ".") + "</div></div>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<div class='metric-box'><div class='metric-title'>Valor de Pago Total</div><div class='metric-value'>{total_valor:,}".replace(",", ".") + "</div></div>", unsafe_allow_html=True)
+            #with col3:
+                #st.markdown(f"<div class='metric-box'><div class='metric-title'>Valor Entregado</div><div class='metric-value'>{valor_entregado:,}".replace(",", ".") + "</div></div>", unsafe_allow_html=True)
+            
+            # Métricas principales
+            query_df = """
+            WITH resumen AS (
+                            SELECT 
+                                infraccion as Nucleo,
+                                COUNT(id_registro) AS cantidad,
+                                ROUND(
+                                    (COUNT(id_registro) * 100.0 / SUM(COUNT(id_registro)) OVER ()), 
+                                    2
+                                ) AS porcentaje
+                            FROM pagos
+                            WHERE aplicacion_final = 'APLICA'
+                            AND fecha_sencilla >= %s
+                            AND fecha_sencilla <= %s
+                            GROUP BY Nucleo
+                        ),
+                        resumen_total AS (
+                            SELECT 
+                                'TOTAL' AS Nucleo,
+                                SUM(cantidad) AS cantidad,
+                                100.0 AS porcentaje
+                            FROM resumen
+                        )
+                        SELECT * 
+                        FROM (
+                            SELECT * FROM resumen
+                            UNION ALL
+                            SELECT * FROM resumen_total
+                        ) AS final
+                        ORDER BY 
+                            (Nucleo = 'TOTAL'),  -- mueve TOTAL al final
+                            cantidad DESC;
+            """
+            cur.execute(query_df, (fecha_inicio, fecha_fin))
+            nucleo = cur.fetchall()
+            tipos_columns3 = [desc[0] for desc in cur.description]
+
+            df_nucleo = pd.DataFrame(nucleo, columns=tipos_columns3)
+
+            query_df = """
+            WITH resumen AS (
+                            SELECT 
+                                infraccion as Nucleo,
+                                sum(valorpago) AS Recaudo,
+                                ROUND(
+                                    (sum(valorpago) * 100.0 / SUM(sum(valorpago)) OVER ()), 
+                                    2
+                                ) AS porcentaje
+                            FROM pagos
+                            WHERE aplicacion_final = 'APLICA'
+                            AND fecha_sencilla >= %s
+                            AND fecha_sencilla <= %s
+                            GROUP BY Nucleo
+                        ),
+                        resumen_total AS (
+                            SELECT 
+                                'TOTAL' AS Nucleo,
+                                SUM(Recaudo) AS Recaudo,
+                                100.0 AS porcentaje
+                            FROM resumen
+                        )
+                        SELECT * 
+                        FROM (
+                            SELECT * FROM resumen
+                            UNION ALL
+                            SELECT * FROM resumen_total
+                        ) AS final
+                        ORDER BY 
+                            (Nucleo = 'TOTAL'),  -- mueve TOTAL al final
+                            Recaudo DESC;
+            """
+            cur.execute(query_df, (fecha_inicio, fecha_fin))
+            recaudo_nucleo = cur.fetchall()
+            tipos_columns4 = [desc[0] for desc in cur.description]
+
+            df_recaudo_nucleo = pd.DataFrame(recaudo_nucleo, columns=tipos_columns4)
+            # Formatear solo las columnas específicas con separador de miles
+            if 'cantidad' in df_nucleo.columns:
+                df_nucleo['cantidad'] = df_nucleo['cantidad'].apply(lambda x: f"{x:,.0f}")
+                df_nucleo['cantidad'] = df_nucleo['cantidad'].str.replace(",", ".")
+            if 'recaudo' in df_recaudo_nucleo.columns:
+                df_recaudo_nucleo['recaudo'] = df_recaudo_nucleo['recaudo'].apply(lambda x: f"{x:,.0f}")
+                df_recaudo_nucleo['recaudo'] = df_recaudo_nucleo['recaudo'].str.replace(",", ".")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.subheader("Cantidad de Pagos por Nucleo")
+                st.dataframe(df_nucleo, use_container_width=True, hide_index=True)
+            with col2:
+                st.subheader("Recaudo por Nucleo")
+                st.dataframe(df_recaudo_nucleo, use_container_width=True, hide_index=True)
+            
 #------------------------------------------------------------------
 # Logica para consultar Bases
 #------------------------------------------------------------------
