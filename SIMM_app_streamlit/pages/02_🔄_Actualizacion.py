@@ -730,15 +730,15 @@ class StreamlitUI:
     def _mostrar_topbar(self):
         """Muestra la barra de navegación superior con option menu"""
         MODULOS = {
-            "Carga de Gestiones": "🧮",
-            "Carga de SMS": "📲",
-            "Carga de Pagos": "💰",
-            "Carga de Bases": "📋"
+            "🧮 Carga de Gestiones": "🧮",
+            "📲 Carga de SMS": "📲",
+            "💰 Carga de Pagos": "💰",
+            "📋 Carga de Bases": "📋"
         }
         modulo_seleccionado = option_menu(
             menu_title=None,
             options=list(MODULOS.keys()),
-            icons=["calculator", "chat", "cash-coin", "clipboard-data"],
+            icons=[MODULOS[k] for k in MODULOS.keys()],
             orientation="horizontal"
         )
         if modulo_seleccionado != st.session_state.modulo_actual:
@@ -748,15 +748,15 @@ class StreamlitUI:
     def _mostrar_carga_archivo(self):
         """Componente de carga de archivo mejorado"""
         MODULO_CONFIG = {
-            "Carga de Gestiones": {"ext": ".xlsx", "multiple": False, "icon": "🧮"},
-            "Carga de SMS": {"ext": ".xlsx", "multiple": False, "icon": "📲"},
-            "Carga de Pagos": {"ext": ".xlsx", "multiple": False, "icon": "💰"},
-            "Carga de Bases": {"ext": ".xlsx", "multiple": False, "icon": "📋"}
+            "🧮 Carga de Gestiones": {"ext": ".xlsx", "multiple": False},
+            "📲 Carga de SMS": {"ext": ".xlsx", "multiple": False},
+            "💰 Carga de Pagos": {"ext": ".xlsx", "multiple": False},
+            "📋 Carga de Bases": {"ext": ".xlsx", "multiple": False}
         }
         
         config = MODULO_CONFIG.get(st.session_state.modulo_actual, {})
-        st.title(f"{config.get('icon', '📄')} {st.session_state.modulo_actual}")
-        
+        st.title(f"{st.session_state.modulo_actual}")
+
         uploaded_files = st.file_uploader(
             f"Subir archivo{'s' if config['multiple'] else ''}",
             type=[config["ext"]],  # Lista con la extensión
@@ -775,10 +775,10 @@ class StreamlitUI:
         col1, col2, col3 = st.columns([1,6,1])
         with col2:  
             tabla_map = {
-                "Carga de Gestiones": "gestiones",
-                "Carga de SMS": "sms",
-                "Carga de Pagos": "pagos",
-                "Carga de Bases": "bases"
+                "📊 Gestiones": "gestiones",
+                "📱 SMS": "sms",
+                "💰 Pagos": "pagos",
+                "📋 Bases": "bases"
             }
             tabla = tabla_map.get(st.session_state.modulo_actual)
             if tabla:
@@ -799,15 +799,15 @@ class StreamlitUI:
                 st.subheader("⚙ Procesar Archivo")
                 if st.button("✅ Confirmar Procesar Archivo", type="primary"):
                     MODULO_PROCESSORS = {
-                        "Carga de Gestiones": GestionesProcessor,
-                        "Carga de SMS": SMSProcessor,
-                        "Carga de Pagos": PagosProcessor,
-                        "Carga de Bases": BasesProcessor
+                        "📊 Gestiones": GestionesProcessor,
+                        "📱 SMS": SMSProcessor,
+                        "💰 Pagos": PagosProcessor,
+                        "📋 Bases": BasesProcessor
                     }
                     processor_class = MODULO_PROCESSORS.get(st.session_state.modulo_actual)
                     processor = processor_class(self.engine)
                     try:
-                        if st.session_state.modulo_actual == "Carga de Pagos" and len(files) > 1:
+                        if st.session_state.modulo_actual == "💰 Pagos" and len(files) > 1:
                             success = processor.procesar_archivos_multiples(files)
                         else:
                             success = processor.procesar_archivo(files[0])

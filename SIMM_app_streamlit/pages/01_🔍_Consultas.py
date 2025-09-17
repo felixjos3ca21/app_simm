@@ -10,6 +10,7 @@ from src.database.postgres import DatabaseManager
 import pathlib
 from datetime import date
 import os
+import plotly.express as px
 
 # Configuración de la página
 st.set_page_config(
@@ -97,13 +98,13 @@ def modulo_gestiones():
             query_tipos = """
             SELECT 
                 tipo_llamada,
-                COUNT(*) AS cantidad,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS porcentaje
+                COUNT(DISTINCT id_gestion) AS cantidad,
+                ROUND(100.0 * COUNT(DISTINCT id_gestion) / SUM(COUNT(DISTINCT id_gestion)) OVER (), 2) AS porcentaje
             FROM gestiones
             WHERE fecha_gestion >= %s
             AND fecha_gestion <= %s
             GROUP BY tipo_llamada
-            ORDER BY cantidad DESC;
+            ORDER BY porcentaje DESC;
             """
             cur.execute(query_tipos, (fecha_inicio, fecha_fin))
             tipos_llamada = cur.fetchall()
@@ -112,12 +113,13 @@ def modulo_gestiones():
             query_resultado = """
             SELECT 
                 resultado,
-                COUNT(*) AS cantidad,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS porcentaje
+                COUNT(DISTINCT id_gestion) AS cantidad,
+                ROUND(100.0 * COUNT(DISTINCT id_gestion) / SUM(COUNT(DISTINCT id_gestion)) OVER (), 2) AS porcentaje
             FROM gestiones
-            WHERE fecha_gestion >= '2025-08-01'
+            WHERE fecha_gestion >= %s
+            AND fecha_gestion <= %s
             GROUP BY resultado
-            ORDER BY cantidad DESC;
+            ORDER BY porcentaje DESC;
             """
             cur.execute(query_resultado, (fecha_inicio, fecha_fin))
             resultados = cur.fetchall()
@@ -126,12 +128,13 @@ def modulo_gestiones():
             query_asesor = """
             SELECT 
                 asesor,
-                COUNT(*) AS cantidad,
-                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS porcentaje
+                COUNT(DISTINCT id_gestion) AS cantidad,
+                ROUND(100.0 * COUNT(DISTINCT id_gestion) / SUM(COUNT(DISTINCT id_gestion)) OVER (), 2) AS porcentaje
             FROM gestiones
-            WHERE fecha_gestion >= '2025-08-01'
+            WHERE fecha_gestion >= %s
+            AND fecha_gestion <= %s
             GROUP BY asesor
-            ORDER BY cantidad DESC;
+            ORDER BY porcentaje DESC;
             """
             cur.execute(query_asesor, (fecha_inicio, fecha_fin))
             asesores = cur.fetchall()
@@ -154,13 +157,36 @@ def modulo_gestiones():
         col1, col2, col3 = st.columns(3)
         with col1:
             st.subheader("Distribución de Tipo Llamada")
-            st.dataframe(df_tipos, use_container_width=True)
+            df_tipos['cantidad'] = df_tipos['cantidad'].apply(lambda x: f"{x:,.0f}")
+            df_tipos['cantidad'] = df_tipos['cantidad'].str.replace(",", ".")
+            df_tipos['porcentaje'] = df_tipos['porcentaje'].apply(lambda x: f"{x:.2f}%")
+            df_tipos.rename(columns={'tipo_llamada': 'Tipo Llamada', 'cantidad': 'Cantidad', 'porcentaje': 'Porcentaje'}, inplace=True)
+            
+
+
+            st.dataframe(df_tipos, use_container_width=True, hide_index=True)
+
         with col2:
             st.subheader("Distribución de Resultado")
-            st.dataframe(df_resultado, use_container_width=True)
+            df_resultado['cantidad'] = df_resultado['cantidad'].apply(lambda x: f"{x:,.0f}")
+            df_resultado['cantidad'] = df_resultado['cantidad'].str.replace(",", ".")
+            df_resultado['porcentaje'] = df_resultado['porcentaje'].apply(lambda x: f"{x:.2f}%")
+            df_resultado.rename(columns={'resultado': 'Resultado', 'cantidad': 'Cantidad', 'porcentaje': 'Porcentaje'}, inplace=True)
+
+ 
+
+            st.dataframe(df_resultado, use_container_width=True, hide_index=True)
+
         with col3:
             st.subheader("Distribución de Asesores")
-            st.dataframe(df_asesores, use_container_width=True)
+            df_asesores['cantidad'] = df_asesores['cantidad'].apply(lambda x: f"{x:,.0f}")
+            df_asesores['cantidad'] = df_asesores['cantidad'].str.replace(",", ".")
+            df_asesores['porcentaje'] = df_asesores['porcentaje'].apply(lambda x: f"{x:.2f}%")
+            df_asesores.rename(columns={'asesor': 'Asesor', 'cantidad': 'Cantidad', 'porcentaje': 'Porcentaje'}, inplace=True)
+
+
+            st.dataframe(df_asesores, use_container_width=True, hide_index=True)
+            
 #------------------------------------------------------------------
 # Logica para consultar SMS
 #------------------------------------------------------------------
@@ -289,6 +315,7 @@ def modulo_pagos():
             fecha_fin = default_fin
         
     if st.button("Consultar"):
+
         with conn.cursor() as cur:
             # Métricas principales
             query_total = """
@@ -319,7 +346,7 @@ def modulo_pagos():
                 st.markdown(f"<div class='metric-box'><div class='metric-title'>Valor de Pago Total</div><div class='metric-value'>{total_valor:,}".replace(",", ".") + "</div></div>", unsafe_allow_html=True)
             #with col3:
                 #st.markdown(f"<div class='metric-box'><div class='metric-title'>Valor Entregado</div><div class='metric-value'>{valor_entregado:,}".replace(",", ".") + "</div></div>", unsafe_allow_html=True)
-            
+
             # Métricas principales
             query_df = """
             WITH resumen AS (
@@ -400,9 +427,13 @@ def modulo_pagos():
             if 'cantidad' in df_nucleo.columns:
                 df_nucleo['cantidad'] = df_nucleo['cantidad'].apply(lambda x: f"{x:,.0f}")
                 df_nucleo['cantidad'] = df_nucleo['cantidad'].str.replace(",", ".")
+                df_nucleo['porcentaje'] = df_nucleo['porcentaje'].apply(lambda x: f"{x:.2f}%")
+                df_nucleo.rename(columns={'nucleo': 'Núcleo', 'cantidad': 'Cantidad', 'porcentaje': 'Porcentaje'}, inplace=True)
             if 'recaudo' in df_recaudo_nucleo.columns:
                 df_recaudo_nucleo['recaudo'] = df_recaudo_nucleo['recaudo'].apply(lambda x: f"{x:,.0f}")
                 df_recaudo_nucleo['recaudo'] = df_recaudo_nucleo['recaudo'].str.replace(",", ".")
+                df_recaudo_nucleo['porcentaje'] = df_recaudo_nucleo['porcentaje'].apply(lambda x: f"{x:.2f}%")
+                df_recaudo_nucleo.rename(columns={'nucleo': 'Núcleo', 'recaudo': 'Recaudo', 'porcentaje': 'Porcentaje'}, inplace=True)
 
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -411,7 +442,36 @@ def modulo_pagos():
             with col2:
                 st.subheader("Recaudo por Nucleo")
                 st.dataframe(df_recaudo_nucleo, use_container_width=True, hide_index=True)
+
+            st.markdown("----")
+            query_grafico1 = """
+                SELECT cast(dia as integer), TO_CHAR(SUM(valorpago), 'FM$ 999,999,999,999') as recaudo from pagos
+                    where aplicacion_final = 'APLICA'
+                        and fecha_sencilla >= %s
+                        and fecha_sencilla <= %s
+                    group by dia
+                    order by dia
+                """
+            cur.execute(query_grafico1, (fecha_inicio, fecha_fin))
+            grafico = cur.fetchall()
+            tipos_columns4 = [desc[0] for desc in cur.description]
+
+            df_grafico_recaudo_dia = pd.DataFrame(grafico, columns=tipos_columns4)
+            #st.dataframe(df_grafico_recaudo_dia, use_container_width=True, hide_index=True)
+            df_grafico_recaudo_dia['recaudo'] = pd.to_numeric(df_grafico_recaudo_dia['recaudo'].str.replace('$','').str.replace('.','').str.replace(',',''), errors='coerce')
+
             
+            fig = px.bar(df_grafico_recaudo_dia, x='dia', y='recaudo', 
+                         title="Recaudo por Día", orientation='v', text='recaudo',
+                         color='recaudo', color_continuous_scale='greens',
+                         width=800, height=600)
+            
+            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside' )
+            fig.update_layout(uniformtext_minsize=13)
+            fig.update_traces(textfont_color='darkgreen')
+
+            st.plotly_chart(fig, use_container_width=True)
+
 #------------------------------------------------------------------
 # Logica para consultar Bases
 #------------------------------------------------------------------
@@ -559,14 +619,22 @@ def modulo_bases():
 
 
 def main():
-    # Sidebar
-    with st.sidebar:
-        st.header("Módulos")
-        modulo = st.selectbox(
-            "Seleccione módulo:",
-            options=["📊 Gestiones", "📱 SMS", "💰 Pagos", "📋 Bases"],
-            index=0
-        )
+    # Option menu horizontal en vez de sidebar
+    from streamlit_option_menu import option_menu
+    MODULOS = {
+        "📊 Gestiones": "📊",
+        "📱 SMS": "📱",
+        "💰 Pagos": "💰",
+        "📋 Bases": "📋"
+    }
+    modulo = option_menu(
+        menu_title=None,
+        options=list(MODULOS.keys()),
+        icons=list(MODULOS.values()),
+        orientation="horizontal"
+    )
+    st.markdown("---")
+
 
     if modulo == "📊 Gestiones":
         modulo_gestiones()

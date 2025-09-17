@@ -724,14 +724,15 @@ def mostrar_status_bases_general():
 # ==============================================
 
 def topbar_navegacion():
+    MODULOS = {
+        "📑 Cruce de Datos Pagos Vs. Gestiones": "📑",
+        "📋 Status Bases Mes": "📋",
+        "🧮 Status de Bases": "🧮"
+    }
     selected = option_menu(
         menu_title=None,
-        options=[
-            "Cruce de Datos Pagos Vs. Gestiones",
-            "Status Bases Mes",
-            "Status de Bases"
-        ],
-        icons=["table", "bar-chart", "database"],
+        options=list(MODULOS.keys()),
+        icons=[MODULOS[k] for k in MODULOS.keys()],
         orientation="horizontal"
     )
     return selected
@@ -745,11 +746,11 @@ def main():
     opcion_seleccionada = topbar_navegacion()
     
     with st.container():
-        if opcion_seleccionada == "Cruce de Datos Pagos Vs. Gestiones":
+        if opcion_seleccionada == "📑 Cruce de Datos Pagos Vs. Gestiones":
             mostrar_vista_cruce()
-        elif opcion_seleccionada == "Status Bases Mes":
+        elif opcion_seleccionada == "📋 Status Bases Mes":
             mostrar_status_bases_general()
-        elif opcion_seleccionada == "Status de Bases":
+        elif opcion_seleccionada == "🧮 Status de Bases":
             mostrar_status_bases()
 
 if __name__ == "__main__":

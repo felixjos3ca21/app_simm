@@ -94,7 +94,13 @@ div[data-testid="stExpander"] .st-expanderContent {
     background: #fff !important;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(56, 161, 24, 0.08);
+ }
+
+/* Encabezados de DataFrame en negrita */
+.stDataFrame table thead tr th {
+    font-weight: bold !important;
 }
+
 
 /* Ajustes generales */
 .main-container {
