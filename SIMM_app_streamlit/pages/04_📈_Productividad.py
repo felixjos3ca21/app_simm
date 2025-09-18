@@ -109,12 +109,10 @@ if st.button("🚀 Ejecutar análisis", type="primary"):
     st.session_state.ejecutar_analisis = True
 # Definir engine_simm para todo el análisis
 engine_simm = get_engine()
-st.markdown("## 📋 Análisis de Gestiones")
 
 # ==============================================
 # Logica para el status de bases
 # ==============================================
-
 
 def mostrar_status_bases():
     st.header("📊 Status de Bases vs Gestiones")

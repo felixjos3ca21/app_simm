@@ -297,21 +297,21 @@ class GestionesProcessor(DataProcessor):
         
     def _procesar_archivo(self, archivo):
         try:
-            df_procesado, df_errores, mensaje = preparar_datos(archivo, archivo.name)
-            
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+                tmp.write(archivo.getvalue())
+                tmp_path = tmp.name
+            df_procesado, df_errores, mensaje = preparar_datos(tmp_path, archivo.name)
             # Validación adicional
             campos_obligatorios = ['tipo_documento', 'nombre_usuario', 'documento', 'fecha_gestion']
             mask_errores = df_procesado[campos_obligatorios].isnull().any(axis=1)
-            
             # Mover registros con errores
             nuevos_errores = df_procesado[mask_errores].copy()
             df_procesado = df_procesado[~mask_errores]
-            
             # Combinar errores nuevos con los originales
             if not nuevos_errores.empty:
                 nuevos_errores['error'] = 'Campos obligatorios faltantes'
                 df_errores = pd.concat([df_errores, nuevos_errores])
-            
             return df_procesado, df_errores, mensaje
         except Exception as e:
             return pd.DataFrame(), pd.DataFrame({'error': [str(e)]}), str(e)
@@ -382,8 +382,11 @@ class SMSProcessor(DataProcessor):
         super().__init__(engine, config)
         
     def _procesar_archivo(self, archivo):
-        """Implementación específica de limpieza para SMS"""
-        return preparar_datos_sms(archivo, archivo.name)
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            tmp.write(archivo.getvalue())
+            tmp_path = tmp.name
+        return preparar_datos_sms(tmp_path, archivo.name)
     
 class PagosProcessor(DataProcessor):
     """Procesador específico para pagos con procesamiento por lotes"""
@@ -634,20 +637,17 @@ class BasesProcessor(DataProcessor):
         super().__init__(engine, config)
 
     def _procesar_archivo(self, archivo):
-        """
-        Llama a la función de limpieza y aplica el mapeo de columnas
-        para que coincida con la estructura de la tabla 'bases'.
-        """
-        df_procesado, df_errores, mensaje = preparar_datos_bases(archivo, archivo.name)
-
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            tmp.write(archivo.getvalue())
+            tmp_path = tmp.name
+        df_procesado, df_errores, mensaje = preparar_datos_bases(tmp_path, archivo.name)
         # Aplicar mapeo de columnas a df_procesado
         mapeo = self.config["mapeo_columnas"]
         df_procesado = df_procesado.rename(columns=mapeo)
-
         # Aplicar mapeo a df_errores si contiene columnas relevantes
         if not df_errores.empty:
             df_errores = df_errores.rename(columns={k: v for k, v in mapeo.items() if k in df_errores.columns})
-
         return df_procesado, df_errores, mensaje
 
 # ==============================================================================
@@ -799,15 +799,18 @@ class StreamlitUI:
                 st.subheader("⚙ Procesar Archivo")
                 if st.button("✅ Confirmar Procesar Archivo", type="primary"):
                     MODULO_PROCESSORS = {
-                        "📊 Gestiones": GestionesProcessor,
-                        "📱 SMS": SMSProcessor,
-                        "💰 Pagos": PagosProcessor,
-                        "📋 Bases": BasesProcessor
+                        "🧮 Carga de Gestiones": GestionesProcessor,
+                        "� Carga de SMS": SMSProcessor,
+                        "💰 Carga de Pagos": PagosProcessor,
+                        "📋 Carga de Bases": BasesProcessor
                     }
                     processor_class = MODULO_PROCESSORS.get(st.session_state.modulo_actual)
+                    if processor_class is None:
+                        st.error(f"No se encontró procesador para el módulo: {st.session_state.modulo_actual}")
+                        return
                     processor = processor_class(self.engine)
                     try:
-                        if st.session_state.modulo_actual == "💰 Pagos" and len(files) > 1:
+                        if st.session_state.modulo_actual == "💰 Carga de Pagos" and len(files) > 1:
                             success = processor.procesar_archivos_multiples(files)
                         else:
                             success = processor.procesar_archivo(files[0])
