@@ -15,6 +15,9 @@ import pandas as pd
 from src.database.postgres import get_connection
 from assets.fondo import set_background
 import pathlib
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+
 
 sys.path.append(str(Path(__file__).parent))
 
@@ -67,6 +70,10 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         from datetime import date
         fecha_minima = date(2025, 8, 1)
         df = df[df['fechapago'] >= fecha_minima]
+        
+        fecha_fin = fecha_fin + timedelta(days=1)
+        #fecha_inicio_base = date.today() - relativedelta(months=6)
+        #fecha_fin_base = date.today() + timedelta(days=1)
 
         # 2. Cruce por código cliente (dentro del rango de fechas)
         query_cod = """
@@ -169,7 +176,7 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
 
         # 7. Cruce con tabla bases: para cada pago, buscar el registro más reciente de bases por nitcliente/documento
         query_bases = """
-            SELECT documento, base, fecha_entrega
+            SELECT documento, base, base_cleaned, fecha_entrega
             FROM bases
             WHERE documento = ANY(%s)
             AND fecha_entrega BETWEEN %s AND %s
@@ -183,10 +190,11 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
             df_bases['fecha_entrega'] = pd.to_datetime(df_bases['fecha_entrega'])
             # Para cada documento, quedarnos con el registro más reciente
             df_bases = df_bases.sort_values('fecha_entrega', ascending=False).drop_duplicates('documento', keep='first')
-            df_bases = df_bases.rename(columns={'documento': 'nitcliente', 'base': 'base_cartera', 'fecha_entrega': 'fecha_entrega_cartera'})
-            df_final = df_final.merge(df_bases[['nitcliente', 'base_cartera', 'fecha_entrega_cartera']], on='nitcliente', how='left')
+            df_bases = df_bases.rename(columns={'documento': 'nitcliente', 'base': 'base_cartera', 'base_cleaned': 'base_cartera_limpia', 'fecha_entrega': 'fecha_entrega_cartera'})
+            df_final = df_final.merge(df_bases[['nitcliente', 'base_cartera', 'base_cartera_limpia', 'fecha_entrega_cartera']], on='nitcliente', how='left')
         else:
             df_final['base_cartera'] = None
+            df_final['base_cartera_limpia'] = None
             df_final['fecha_entrega_cartera'] = None
 
         # Ordenar columnas: originales + nuevas
@@ -196,14 +204,17 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
             'fecha_gestion_nit', 'id_gestion_nit', 'resultado_nit', 'archivo_nit', 'tipollamada_nit', 'tipo_chat_nit',
             'sms_enviado', 'sms_enviado_codcliente',
             'base_cartera', 'fecha_entrega_cartera',
-            'base_cartera_cod', 'fecha_entrega_cartera_cod'
+            'base_cartera_limpia',
+            'base_cartera_cod', 'fecha_entrega_cartera_cod',
+            # añadido para exponer la versión cleaned del cruce por codcliente
+            'base_cartera_limpia_cod'
         ]
 
 
         # 8. Cruce adicional: buscar en bases por codcliente <-> numero_comparendo
         cods_unicos = df['codcliente'].dropna().astype(str).unique().tolist()
         query_bases_cod = """
-            SELECT numero_comparendo, base, fecha_entrega
+            SELECT numero_comparendo, base, base_cleaned, fecha_entrega
             FROM bases
             WHERE numero_comparendo = ANY(%s)
             AND fecha_entrega BETWEEN %s AND %s
@@ -216,10 +227,11 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         if not df_bases_cod.empty:
             df_bases_cod['fecha_entrega'] = pd.to_datetime(df_bases_cod['fecha_entrega'])
             df_bases_cod = df_bases_cod.sort_values('fecha_entrega', ascending=False).drop_duplicates('numero_comparendo', keep='first')
-            df_bases_cod = df_bases_cod.rename(columns={'numero_comparendo': 'codcliente', 'base': 'base_cartera_cod', 'fecha_entrega': 'fecha_entrega_cartera_cod'})
-            df_final = df_final.merge(df_bases_cod[['codcliente', 'base_cartera_cod', 'fecha_entrega_cartera_cod']], on='codcliente', how='left')
+            df_bases_cod = df_bases_cod.rename(columns={'numero_comparendo': 'codcliente', 'base': 'base_cartera_cod', 'base_cleaned': 'base_cartera_limpia_cod', 'fecha_entrega': 'fecha_entrega_cartera_cod'})
+            df_final = df_final.merge(df_bases_cod[['codcliente', 'base_cartera_cod', 'base_cartera_limpia_cod', 'fecha_entrega_cartera_cod']], on='codcliente', how='left')
         else:
             df_final['base_cartera_cod'] = None
+            df_final['base_cartera_limpia_cod'] = None
             df_final['fecha_entrega_cartera_cod'] = None
 
         # 9. Crear columnas únicas finales por cruce (gestion_final, sms_final, base_final, tipollamada_final, tipo_chat_final)
@@ -239,6 +251,7 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
 
         # BASE FINAL: prioriza base_cartera_cod, si no hay usa base_cartera
         df_final['base_final'] = df_final['base_cartera_cod'].combine_first(df_final['base_cartera'])
+        df_final['base_final_limpia'] = df_final['base_cartera_limpia_cod'].combine_first(df_final['base_cartera_limpia'])
         df_final['fecha_entrega_final'] = df_final['fecha_entrega_cartera_cod'].combine_first(df_final['fecha_entrega_cartera'])
         # Si base_final queda vacía, poner 'Sin Base Asociada'
         df_final['base_final'] = df_final['base_final'].fillna('Sin Base Asociada')
@@ -259,12 +272,15 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         mask_sin_base = df_final['base_final'] == 'Sin Base Asociada'
         mask_tllamada = df_final['tipollamada_final'].str.lower().isin(['whatsapp', 'chat alcaldia', 'entrante'])
         df_final.loc[mask_sin_base & mask_tllamada, 'base_final'] = df_final.loc[mask_sin_base & mask_tllamada, 'tipollamada_final']
+        # (Alinear base_final_limpia ya se realizó arriba en bloque único)
 
         # Columnas finales únicas
         columnas_finales = [
             'fecha_gestion_final', 'id_gestion_final', 'resultado_final', 'archivo_final',
             'tipollamada_final', 'tipo_chat_final',
-            'sms_final', 'base_final', 'fecha_entrega_final'
+            'sms_final', 'base_final', 'fecha_entrega_final',
+            # añadido para exponer base limpia final
+            'base_final_limpia'
         ]
         return df_final[original_cols + nuevas_cols + columnas_finales]
     except Exception as e:
@@ -344,14 +360,16 @@ def mostrar_vista_cruce():
                     st.error("Faltan columnas requeridas")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
-
+    
     with col2:
         
         if "cruce_resultado" in st.session_state:
             st.header(" 🧮 Resultados para el Análisis de Pagos Vs Gestiones y Cartera")
             
             df_resultado = st.session_state.cruce_resultado
-            
+            df_aplica = df_resultado[df_resultado['APLICACIÓN FINAL'] == 'APLICA']
+            # Asegurar variable hoy para nombre de archivo aunque no exista del bloque anterior
+            hoy = datetime.now().date()
             st.dataframe(
                 df_resultado,
                 use_container_width=True,
@@ -371,6 +389,357 @@ def mostrar_vista_cruce():
                 file_name=f"Análisis Pagos Vs Gestiones y cartera {hoy}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+            st.markdown("---")
+            
+            st.subheader("Grafico de Recaudo mensual")
+            # Color picker único para todos los gráficos de recaudo (evita duplicados)
+            if 'color_recaudo' not in st.session_state:
+                st.session_state['color_recaudo'] = "#6aa06d"
+            st.session_state['color_recaudo'] = st.color_picker(
+                "Color de barras",
+                value=st.session_state['color_recaudo'],
+                key='color_recaudo_global'
+            )
+            color_barras_global = st.session_state['color_recaudo']
+            color_borde_global = '#6aa06d'
+            if df_aplica.empty:
+                st.info("No hay registros con APLICACIÓN FINAL = 'APLICA' en el resultado.")
+            else:
+                df_aplica = df_aplica.copy()
+                df_aplica['fechapago'] = pd.to_datetime(df_aplica['fechapago'], errors='coerce')
+                # Convertir valorpago a numérico (eliminar posibles símbolos o puntos de miles)
+                if 'valorpago' in df_aplica.columns:
+                    df_aplica['valorpago'] = (df_aplica['valorpago']
+                                                .astype(str)
+                                                .str.replace(r'[^0-9.,]', '', regex=True)
+                                                .str.replace('.', '', regex=False)
+                                                .str.replace(',', '.', regex=False))
+                    df_aplica['valorpago'] = pd.to_numeric(df_aplica['valorpago'], errors='coerce').fillna(0)
+                else:
+                    df_aplica['valorpago'] = 0
+
+                mes_actual = pd.Timestamp.now().month
+                df_aplica_mes = df_aplica[df_aplica['fechapago'].dt.month == mes_actual]
+                # Crear columna de semana ISO (para evitar error si no existe 'SEMANA')
+                if not df_aplica_mes.empty and 'SEMANA' not in df_aplica_mes.columns:
+                    df_aplica_mes = df_aplica_mes.copy()
+                    df_aplica_mes['SEMANA'] = df_aplica_mes['fechapago'].dt.isocalendar().week.astype(int)
+
+                    
+                
+                # Función de formato monetario unificada ($ y separador de miles con punto)
+                def _formato_moneda(v):
+                    try:
+                        return f"${int(round(v)):,}".replace(',', '.')
+                    except Exception:
+                        return "$0"
+                if df_aplica_mes.empty:
+                    st.warning("No hay pagos del mes actual para 'APLICA'.")
+                else:
+                    resumen_mes = (df_aplica_mes
+                                    .groupby(df_aplica_mes['fechapago'].dt.date)
+                                    .agg(Valor=('valorpago', 'sum'))
+                                    .reset_index()
+                                    .sort_values('fechapago'))
+                    # ================= DELTAS DIARIOS =================
+                    resumen_mes['Valor_prev'] = resumen_mes['Valor'].shift(1).fillna(0)
+                    resumen_mes['DeltaAbs'] = resumen_mes['Valor'] - resumen_mes['Valor_prev']
+                    def _delta_pct(row):
+                        prev = row['Valor_prev']
+                        if prev <= 0:
+                            # Por regla de negocio: si no había recaudo previo y hoy hay algo => 100%
+                            return 100.0 if row['Valor'] > 0 else 0.0
+                        return (row['DeltaAbs'] / prev) * 100
+                    resumen_mes['DeltaPct'] = resumen_mes.apply(_delta_pct, axis=1).round(2)
+                    # Signo y etiqueta
+                    def _fmt_sign_abs(v):
+                        if v > 0: return f"+{_formato_moneda(v)}"
+                        if v < 0: return f"-{_formato_moneda(abs(v))}"
+                        return _formato_moneda(0)
+                    def _delta_label_pct(pct):
+                        if pct > 0:
+                            return f"▲ {pct:.2f}%"
+                        if pct < 0:
+                            return f"▼ {abs(pct):.2f}%"
+                        return "0%"
+                    resumen_mes['DeltaLabel'] = resumen_mes['DeltaPct'].apply(_delta_label_pct)
+                    # Añadir texto formateado
+                    resumen_mes['Valor_fmt'] = resumen_mes['Valor'].apply(_formato_moneda)
+                    fig = px.bar(
+                        resumen_mes,
+                        x='fechapago',
+                        y='Valor',
+                        labels={'fechapago': 'Fecha de Pago', 'Valor': 'Valor Pagado'},
+                        title=f'Recaudo Diario Mensual - {pd.Timestamp.now().strftime("%B %Y")}',
+                        text='Valor_fmt'
+                    )
+                    # Mostrar solo el día (número) en eje X; hover con fecha completa & valor formateado
+                    fig.update_layout(
+                        xaxis_title='Día',
+                        yaxis_title='Valor Pagado'
+                    )
+                    color_barras = color_barras_global
+                    color_borde = color_borde_global
+                    fig.update_traces(
+                        texttemplate='%{text}',
+                        textposition='inside',
+                        textangle=90,
+                        insidetextanchor='middle',
+                        textfont_color='white',
+                        marker_color=color_barras,
+                        marker_line_color=color_borde,
+                        marker_line_width=1,
+                        textfont_size=14,
+                        customdata=resumen_mes[['DeltaLabel']],
+                        hovertemplate='<b>%{x|%d/%m/%Y}</b><br>Valor: %{text}<br>Variación: %{customdata[0]}<extra></extra>'
+                    )
+                    # Segunda capa: delta arriba de la barra con color según signo
+                    mask_pos = resumen_mes['DeltaPct'] > 0
+                    mask_neg = resumen_mes['DeltaPct'] < 0
+                    mask_zero = resumen_mes['DeltaPct'] == 0
+                    if mask_pos.any():
+                        fig.add_scatter(
+                            x=resumen_mes.loc[mask_pos, 'fechapago'],
+                            y=resumen_mes.loc[mask_pos, 'Valor'],
+                            mode='text',
+                            text=resumen_mes.loc[mask_pos, 'DeltaLabel'],
+                            textposition='top center',
+                            textfont=dict(color='#2e7d32', size=14),  # verde
+                            showlegend=False,
+                            hoverinfo='skip'
+                        )
+                    if mask_neg.any():
+                        fig.add_scatter(
+                            x=resumen_mes.loc[mask_neg, 'fechapago'],
+                            y=resumen_mes.loc[mask_neg, 'Valor'],
+                            mode='text',
+                            text=resumen_mes.loc[mask_neg, 'DeltaLabel'],
+                            textposition='top center',
+                            textfont=dict(color='#c62828', size=14),  # rojo
+                            showlegend=False,
+                            hoverinfo='skip'
+                        )
+                    if mask_zero.any():
+                        fig.add_scatter(
+                            x=resumen_mes.loc[mask_zero, 'fechapago'],
+                            y=resumen_mes.loc[mask_zero, 'Valor'],
+                            mode='text',
+                            text=resumen_mes.loc[mask_zero, 'DeltaLabel'],
+                            textposition='top center',
+                            textfont=dict(color='#616161', size=14),  # gris
+                            showlegend=False,
+                            hoverinfo='skip'
+                        )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                if df_aplica_mes.empty:
+                    st.warning("No hay pagos del mes actual para 'APLICA'.")
+                else:
+                    # ================= SEMANAL: DOS ENFOQUES =================
+                    tab_full, tab_parcial = st.tabs(["Semanas (Totales)", "Semanas (Parcial Comparable)"])
+
+                    # ---- A) Semanas totales (usa todo lo acumulado de cada semana en el mes, sin truncar al día actual) ----
+                    with tab_full:
+                        resumen_full = (df_aplica_mes
+                                        .groupby('SEMANA')
+                                        .agg(Valor=('valorpago', 'sum'))
+                                        .reset_index()
+                                        .sort_values('SEMANA'))
+                        # Deltas sobre semanas completas acumuladas (sin recorte al día)
+                        resumen_full['Valor_prev'] = resumen_full['Valor'].shift(1).fillna(0)
+                        resumen_full['DeltaAbs'] = resumen_full['Valor'] - resumen_full['Valor_prev']
+                        resumen_full['DeltaPct'] = resumen_full.apply(
+                            lambda r: (100.0 if (r['Valor_prev'] <= 0 and r['Valor'] > 0) else (0.0 if r['Valor_prev'] <= 0 else (r['DeltaAbs']/r['Valor_prev']*100))) , axis=1
+                        ).round(2)
+                        resumen_full['DeltaLabel'] = resumen_full['DeltaPct'].apply(_delta_label_pct)
+                        resumen_full['Valor_fmt'] = resumen_full['Valor'].apply(_formato_moneda)
+                        fig_full = px.bar(
+                            resumen_full,
+                            x='SEMANA', y='Valor', text='Valor_fmt',
+                            labels={'SEMANA':'Semana','Valor':'Valor Pagado'},
+                            title=f'Recaudo Semanal (Totales) - {pd.Timestamp.now().strftime("%B %Y")}'
+                        )
+                        fig_full.update_layout(xaxis_title='Semana', yaxis_title='Valor Pagado')
+                        fig_full.update_traces(
+                            texttemplate='%{text}', textposition='inside', textangle=90,
+                            insidetextanchor='middle', textfont_color='white', marker_color=color_barras_global,
+                            marker_line_color=color_borde_global, marker_line_width=1,
+                            customdata=resumen_full[['DeltaLabel']],
+                            hovertemplate='Semana %{x}<br>Valor: %{text}<br>Variación: %{customdata[0]}<extra></extra>'
+                        )
+                        # Etiquetas de delta coloreadas
+                        mask_pos_f = resumen_full['DeltaPct'] > 0
+                        mask_neg_f = resumen_full['DeltaPct'] < 0
+                        mask_zero_f = resumen_full['DeltaPct'] == 0
+                        if mask_pos_f.any():
+                            fig_full.add_scatter(x=resumen_full.loc[mask_pos_f,'SEMANA'], y=resumen_full.loc[mask_pos_f,'Valor'],
+                                                 mode='text', text=resumen_full.loc[mask_pos_f,'DeltaLabel'],
+                                                 textposition='top center', textfont=dict(color='#2e7d32', size=14),
+                                                 hoverinfo='skip', showlegend=False)
+                        if mask_neg_f.any():
+                            fig_full.add_scatter(x=resumen_full.loc[mask_neg_f,'SEMANA'], y=resumen_full.loc[mask_neg_f,'Valor'],
+                                                 mode='text', text=resumen_full.loc[mask_neg_f,'DeltaLabel'],
+                                                 textposition='top center', textfont=dict(color='#c62828', size=14),
+                                                 hoverinfo='skip', showlegend=False)
+                        if mask_zero_f.any():
+                            fig_full.add_scatter(x=resumen_full.loc[mask_zero_f,'SEMANA'], y=resumen_full.loc[mask_zero_f,'Valor'],
+                                                 mode='text', text=resumen_full.loc[mask_zero_f,'DeltaLabel'],
+                                                 textposition='top center', textfont=dict(color='#616161', size=14),
+                                                 hoverinfo='skip', showlegend=False)
+                        st.plotly_chart(fig_full, use_container_width=True)
+
+                    # ---- B) Semanas Parciales (comparables hasta el mismo día de la semana actual) ----
+                    with tab_parcial:
+                        df_tmp = df_aplica_mes.copy()
+                        # Obtener la última fecha efectivamente registrada (fecha más reciente de pago)
+                        ultima_fecha = df_tmp['fechapago'].max()
+                        # Día de la semana de la última fecha (0=lunes ... 6=domingo)
+                        dia_actual_semana = ultima_fecha.weekday()
+                        # Calcular weekday de cada registro
+                        df_tmp['weekday'] = df_tmp['fechapago'].dt.weekday
+                        # Recortar TODAS las semanas al mismo número de día alcanzado en la semana actual
+                        # (si hoy es miércoles => se consideran solo lunes-miércoles de cada semana)
+                        df_parcial = df_tmp[df_tmp['weekday'] <= dia_actual_semana]
+                        # Nota: anteriormente se usaba max() de todos los registros, lo que incluía semanas completas
+                        # y hacía que parcial == total cuando había semanas previas completas.
+                        resumen_parcial = (df_parcial
+                                           .groupby('SEMANA')
+                                           .agg(Valor=('valorpago', 'sum'))
+                                           .reset_index()
+                                           .sort_values('SEMANA'))
+                        resumen_parcial['Valor_prev'] = resumen_parcial['Valor'].shift(1).fillna(0)
+                        resumen_parcial['DeltaAbs'] = resumen_parcial['Valor'] - resumen_parcial['Valor_prev']
+                        resumen_parcial['DeltaPct'] = resumen_parcial.apply(
+                            lambda r: (100.0 if (r['Valor_prev'] <= 0 and r['Valor'] > 0) else (0.0 if r['Valor_prev'] <= 0 else (r['DeltaAbs']/r['Valor_prev']*100))) , axis=1
+                        ).round(2)
+                        resumen_parcial['DeltaLabel'] = resumen_parcial['DeltaPct'].apply(_delta_label_pct)
+                        resumen_parcial['Valor_fmt'] = resumen_parcial['Valor'].apply(_formato_moneda)
+                        fig_par = px.bar(
+                            resumen_parcial,
+                            x='SEMANA', y='Valor', text='Valor_fmt',
+                            labels={'SEMANA':'Semana','Valor':'Valor Pagado'},
+                            title=f'Recaudo Semanal (Parcial hasta día {dia_actual_semana + 1}) - {pd.Timestamp.now().strftime("%B %Y")}'
+                        )
+                        fig_par.update_layout(xaxis_title='Semana', yaxis_title='Valor Pagado')
+                        fig_par.update_traces(
+                            texttemplate='%{text}', textposition='inside', textangle=90,
+                            insidetextanchor='middle', textfont_color='white', marker_color=color_barras_global,
+                            marker_line_color=color_borde_global, marker_line_width=1,
+                            customdata=resumen_parcial[['DeltaLabel']],
+                            hovertemplate='Semana %{x}<br>Valor: %{text}<br>Variación: %{customdata[0]}<extra></extra>'
+                        )
+                        mask_pos_pw = resumen_parcial['DeltaPct'] > 0
+                        mask_neg_pw = resumen_parcial['DeltaPct'] < 0
+                        mask_zero_pw = resumen_parcial['DeltaPct'] == 0
+                        if mask_pos_pw.any():
+                            fig_par.add_scatter(x=resumen_parcial.loc[mask_pos_pw,'SEMANA'], y=resumen_parcial.loc[mask_pos_pw,'Valor'],
+                                                mode='text', text=resumen_parcial.loc[mask_pos_pw,'DeltaLabel'],
+                                                textposition='top center', textfont=dict(color='#2e7d32', size=14),
+                                                hoverinfo='skip', showlegend=False)
+                        if mask_neg_pw.any():
+                            fig_par.add_scatter(x=resumen_parcial.loc[mask_neg_pw,'SEMANA'], y=resumen_parcial.loc[mask_neg_pw,'Valor'],
+                                                mode='text', text=resumen_parcial.loc[mask_neg_pw,'DeltaLabel'],
+                                                textposition='top center', textfont=dict(color='#c62828', size=14),
+                                                hoverinfo='skip', showlegend=False)
+                        if mask_zero_pw.any():
+                            fig_par.add_scatter(x=resumen_parcial.loc[mask_zero_pw,'SEMANA'], y=resumen_parcial.loc[mask_zero_pw,'Valor'],
+                                                mode='text', text=resumen_parcial.loc[mask_zero_pw,'DeltaLabel'],
+                                                textposition='top center', textfont=dict(color='#616161', size=14),
+                                                hoverinfo='skip', showlegend=False)
+                        st.plotly_chart(fig_par, use_container_width=True)
+                        # Tabla comparativa total vs parcial
+                        try:
+                            comparacion = resumen_full[['SEMANA','Valor']].rename(columns={'Valor':'Valor_total'}).merge(
+                                resumen_parcial[['SEMANA','Valor']].rename(columns={'Valor':'Valor_parcial'}),
+                                on='SEMANA', how='left'
+                            )
+                            comparacion['Valor_parcial'] = comparacion['Valor_parcial'].fillna(0)
+                            comparacion['Diferencia'] = comparacion['Valor_total'] - comparacion['Valor_parcial']
+                            comparacion['% Avance'] = comparacion.apply(lambda r: (r['Valor_parcial']/r['Valor_total']*100) if r['Valor_total']>0 else 0, axis=1).round(2)
+                            semana_actual_iso = pd.Timestamp.now().isocalendar().week
+                            comparacion['Semana en curso'] = comparacion['SEMANA'] == semana_actual_iso
+                            # Formateo
+                            for colm in ['Valor_total','Valor_parcial','Diferencia']:
+                                comparacion[colm] = comparacion[colm].apply(lambda v: f"${int(v):,}".replace(',','.') if pd.notnull(v) else v)
+                            comparacion['% Avance'] = comparacion['% Avance'].apply(lambda v: f"{v:.2f}%")
+                            st.markdown("**Comparación Semanal (Total vs Parcial al día actual)**")
+                            st.dataframe(comparacion, use_container_width=True)
+                        except Exception as _e:
+                            st.info(f"No se pudo construir comparación semanal: {_e}")
+        
+            st.subheader("Prueba Análisis de Bases")
+        
+            df_resultado = df_resultado.copy()
+            df_resultado = df_resultado[df_resultado['APLICACIÓN FINAL'] == 'APLICA']
+            if df_resultado.empty:
+                st.info("No hay registros con APLICACIÓN FINAL = 'APLICA' en el resultado.")
+            else:
+                # Normalizaciones y conversión de tipos
+                df_resultado = df_resultado.copy()
+                df_resultado['fechapago'] = pd.to_datetime(df_resultado['fechapago'], errors='coerce')
+                # Convertir valorpago a numérico (eliminar posibles símbolos o puntos de miles)
+                if 'valorpago' in df_resultado.columns:
+                    df_resultado['valorpago'] = (df_resultado['valorpago']
+                                                .astype(str)
+                                                .str.replace(r'[^0-9.,]', '', regex=True)
+                                                .str.replace('.', '', regex=False)
+                                                .str.replace(',', '.', regex=False))
+                    df_resultado['valorpago'] = pd.to_numeric(df_resultado['valorpago'], errors='coerce').fillna(0)
+                else:
+                    df_resultado['valorpago'] = 0
+
+                # Asegurar columna base_final_limpia
+                if 'base_final_limpia' not in df_resultado.columns:
+                    df_resultado['base_final_limpia'] = df_resultado.get('base_final', 'SIN BASE')
+                # Reglas especiales: si base_final es canal y base_final_limpia vacío, tomarlo
+                canales_especiales = ['whatsapp', 'chat alcaldia', 'entrante']
+                df_resultado['base_final'] = df_resultado['base_final'].fillna('SIN BASE')
+                mask_especial = df_resultado['base_final'].str.lower().isin(canales_especiales)
+                df_resultado.loc[mask_especial & df_resultado['base_final_limpia'].isna(), 'base_final_limpia'] = df_resultado.loc[mask_especial & df_resultado['base_final_limpia'].isna(), 'base_final']
+                df_resultado['base_final_limpia'] = df_resultado['base_final_limpia'].fillna(df_resultado['base_final'])
+                df_resultado['base_final_limpia'] = df_resultado['base_final_limpia'].fillna('SIN BASE')
+
+                mes_actual = pd.Timestamp.now().month
+                df_resultado_mes = df_resultado[df_resultado['fechapago'].dt.month == mes_actual]
+                if df_resultado_mes.empty:
+                    st.warning("No hay pagos del mes actual para 'APLICA'.")
+                else:
+                    resumen = (df_resultado_mes
+                                .groupby('base_final_limpia', dropna=False)
+                                .agg(Cantidad=('base_final_limpia', 'size'),
+                                    Valor=('valorpago', 'sum'))
+                                .reset_index())
+                    total_valor_num = resumen['Valor'].sum()
+                    # Evitar división por cero
+                    if total_valor_num == 0:
+                        resumen['Porcentaje'] = 0
+                    else:
+                        resumen['Porcentaje'] = (resumen['Valor'] / total_valor_num * 100).round(2)
+
+                    # Ordenar
+                    resumen = resumen.sort_values('Porcentaje', ascending=False)
+
+                    # Añadir fila total numérica
+                    fila_total_num = pd.DataFrame({
+                        'base_final_limpia': ['TOTAL'],
+                        'Cantidad': [resumen['Cantidad'].sum()],
+                        'Valor': [total_valor_num],
+                        'Porcentaje': [100.0]
+                    })
+                    resumen = pd.concat([resumen, fila_total_num], ignore_index=True)
+
+                    # Formateo para mostrar (sin afectar cálculos previos)
+                    resumen_display = resumen.copy()
+                    resumen_display.rename(columns={'base_final_limpia': 'Base', 'Porcentaje': '%'}, inplace=True)
+                    resumen_display['Valor'] = resumen_display['Valor'].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
+                    resumen_display['%'] = resumen_display['%'].apply(lambda x: f"{x:,.2f}".replace(',', '.') + '%')
+                    # Asegurar que TOTAL quede exactamente en 100%
+                    resumen_display.loc[resumen_display['Base'] == 'TOTAL', '%'] = '100%'
+
+                    st.markdown(resumen_display[['Base', 'Cantidad', 'Valor', '%']].to_markdown(index=False), unsafe_allow_html=True)
+
+
 
 
 

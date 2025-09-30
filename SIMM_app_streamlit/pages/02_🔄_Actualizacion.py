@@ -775,10 +775,10 @@ class StreamlitUI:
         col1, col2, col3 = st.columns([1,6,1])
         with col2:  
             tabla_map = {
-                "📊 Gestiones": "gestiones",
-                "📱 SMS": "sms",
-                "💰 Pagos": "pagos",
-                "📋 Bases": "bases"
+                "🧮 Carga de Gestiones": "gestiones",
+                "📲 Carga de SMS": "sms",
+                "💰 Carga de Pagos": "pagos",
+                "📋 Carga de Bases": "bases"
             }
             tabla = tabla_map.get(st.session_state.modulo_actual)
             if tabla:
@@ -800,7 +800,7 @@ class StreamlitUI:
                 if st.button("✅ Confirmar Procesar Archivo", type="primary"):
                     MODULO_PROCESSORS = {
                         "🧮 Carga de Gestiones": GestionesProcessor,
-                        "� Carga de SMS": SMSProcessor,
+                        "📲 Carga de SMS": SMSProcessor,
                         "💰 Carga de Pagos": PagosProcessor,
                         "📋 Carga de Bases": BasesProcessor
                     }
@@ -862,7 +862,7 @@ class StreamlitUI:
                     st.error(f"Error en carga: {str(e)}")
 
         # Botón para actualizar resultados de SMS si corresponde
-        if st.session_state.modulo_actual == "Carga de SMS" and hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
+        if st.session_state.modulo_actual == "📲 Carga de SMS" and hasattr(processor, 'df_procesado') and not processor.df_procesado.empty:
             if st.button("🔄 Actualizar columna resultado"):
                 processor.actualizar_resultados()
 

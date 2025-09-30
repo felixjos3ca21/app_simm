@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 from sqlalchemy import text
 from streamlit_option_menu import option_menu
+import base64
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
@@ -36,6 +37,17 @@ try:
 except Exception as e:
     st.error(f"Error al conectar con la base de datos SIMM: {e}")
     db = None
+
+
+def load_image_base64(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+img_base64 = load_image_base64("assets/images/icons8-whatsapp-48.png")
+img_base64_up_arrow = load_image_base64("assets/images/icons8-up-16.png")
+img_base64_down_arrow = load_image_base64("assets/images/icons8-down-arrow-24.png")
+img_base64_line = load_image_base64("assets/images/icons8-horizontal-line-48.png")
 # ======================================================================
 # FUNCIONES DE ANÁLISIS
 # ======================================================================
@@ -138,7 +150,7 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                # DELTA para cantidad de bases asignadas
+                
                 if cantidad_bases_unicas_com == 0:
                     delta_pct = 100 if cantidad_bases_unicas > 0 else 0
                 else:
@@ -148,8 +160,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                 else:
                     delta_pct2 = ((cantidad_bases_unicas_com - cantidad_bases_unicas_com2) / cantidad_bases_unicas_com2) * 100
             
-                flecha = "🟢" if delta_pct > 0 else "🔴"
-                color = "#32882f" if delta_pct > 0 else "#a03838"
+                if delta_pct > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_pct < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
                 st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Cantidad de Bases Asigandas</div>
@@ -161,8 +180,16 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                 
-                flecha = "🟢" if delta_pct2 > 0 else "🔴"
-                color = "#32882f" if delta_pct2 > 0 else "#a03838"
+                
+                if delta_pct2 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_pct2 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
                 st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
@@ -173,22 +200,30 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     
                     </div>
                     """, unsafe_allow_html=True)
+                
 
             with col2:
-                # DELTA para registros totales
+                
                 if kpi_com[0] == 0:
-                    delta_kpi_0 = 100 if kpi[0] > 0 else 0
+                    delta_kpi_0 = 0
                 else:
                     delta_kpi_0 = ((kpi[0] - kpi_com[0]) / kpi_com[0]) * 100
+
                 if kpi_com2[0] == 0:
-                    delta_kpi_0_2 = 100 if kpi_com[0] > 0 else 0
+                    delta_kpi_0_2 = 0
                 else:
                     delta_kpi_0_2 = ((kpi_com[0] - kpi_com2[0]) / kpi_com2[0]) * 100
                 
-                
                 delta = delta_kpi_0
-                flecha = "🟢" if delta_kpi_0 > 0 else "🔴"
-                color = "#32882f" if delta_kpi_0 > 0 else "#a03838"
+                if delta_kpi_0 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_kpi_0 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
                 st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Registros Totales</div>
@@ -201,8 +236,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     """, unsafe_allow_html=True)
                 
                 delta = delta_kpi_0_2
-                flecha = "🟢" if delta_kpi_0_2 > 0 else "🔴"
-                color = "#32882f" if delta_kpi_0_2 > 0 else "#a03838"
+                if delta_kpi_0_2 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_kpi_0_2 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
 
                 st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
@@ -215,21 +257,31 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                 
+                
             with col3:
                 # DELTA para documentos únicos
                 if kpi_com[1] == 0:
-                    delta_kpi_1 = 100 if kpi[1] > 0 else 0
+                    delta_kpi_1 = 0
                 else:
                     delta_kpi_1 = ((kpi[1] - kpi_com[1]) / kpi_com[1]) * 100
+                
                 if kpi_com2[1] == 0:
-                    delta_kpi_1_2 = 100 if kpi_com[1] > 0 else 0
+                    delta_kpi_1_2 = 0
                 else:
                     delta_kpi_1_2 = ((kpi_com[1] - kpi_com2[1]) / kpi_com2[1]) * 100
                 
 
                 delta = delta_kpi_1
-                flecha = "🟢" if delta_kpi_1 > 0 else "🔴"
-                color = "#32882f" if delta_kpi_1 > 0 else "#a03838"
+                if delta_kpi_1 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_kpi_1 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
+
                 st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Documentos Únicos</div>
@@ -241,8 +293,16 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                 """, unsafe_allow_html=True)
 
                 delta = delta_kpi_1_2
-                flecha = "🟢" if delta_kpi_1_2 > 0 else "🔴"    
-                color = "#32882f" if delta_kpi_1_2 > 0 else "#a03838"
+                if delta_kpi_1_2 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_kpi_1_2 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
+
                 st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
@@ -252,6 +312,8 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     </div>
                     </div>
                 """, unsafe_allow_html=True)
+                
+
             with col4:
                 # DELTA para monto total
                 if kpi_com[2] == 0:
@@ -265,8 +327,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                 
 
                 delta = delta_kpi_2
-                flecha = "🟢" if delta_kpi_2 > 0 else "🔴"
-                color = "#32882f" if delta_kpi_2 > 0 else "#a03838"
+                if delta_kpi_2 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_kpi_2 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
                 st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Monto Total</div>
@@ -278,8 +347,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                 delta = delta_kpi_2_2
-                flecha = "🟢" if delta_kpi_2_2 > 0 else "🔴"
-                color = "#32882f" if delta_kpi_2_2 > 0 else "#a03838"
+                if delta_kpi_2_2 > 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                    color = "#32882f"
+                elif delta_kpi_2_2 < 0:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                    color = "#a03838"
+                else:
+                    flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                    color = "#2A2828"
                 st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                     <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
@@ -287,7 +363,6 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     <div style='color:{color};font-size:1.2rem'>
                         {flecha} {abs(delta):.2f}%
                     </div>
-                    
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -464,8 +539,16 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     else:
                         delta_pct2 = ((cantidad_bases_unicas_com - cantidad_bases_unicas_com2) / cantidad_bases_unicas_com2) * 100
                 
-                    flecha = "🟢" if delta_pct > 0 else "🔴"
-                    color = "#32882f" if delta_pct > 0 else "#a03838"
+                    if delta_pct > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_pct < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
+                        
                     st.markdown(f"""
                         <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Cantidad de Bases Asigandas</div>
@@ -477,8 +560,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    flecha = "🟢" if delta_pct2 > 0 else "🔴"
-                    color = "#32882f" if delta_pct2 > 0 else "#a03838"
+                    if delta_pct2 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_pct2 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
                     st.markdown(f"""
                         <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
@@ -493,18 +583,25 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                 with col2:
                     # DELTA para registros totales
                     if kpi_com[0] == 0:
-                        delta_kpi_0 = 100 if kpi[0] > 0 else 0
+                        delta_kpi_0 = 0
                     else:
                         delta_kpi_0 = ((kpi[0] - kpi_com[0]) / kpi_com[0]) * 100
                     if kpi_com2[0] == 0:
-                        delta_kpi_0_2 = 100 if kpi_com[0] > 0 else 0
+                        delta_kpi_0_2 = 0
                     else:
                         delta_kpi_0_2 = ((kpi_com[0] - kpi_com2[0]) / kpi_com2[0]) * 100
                     
                     
                     delta = delta_kpi_0
-                    flecha = "🟢" if delta_kpi_0 > 0 else "🔴"
-                    color = "#32882f" if delta_kpi_0 > 0 else "#a03838"
+                    if delta_kpi_0 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_kpi_0 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
                     st.markdown(f"""
                         <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Registros Totales</div>
@@ -517,8 +614,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                         """, unsafe_allow_html=True)
                     
                     delta = delta_kpi_0_2
-                    flecha = "🟢" if delta_kpi_0_2 > 0 else "🔴"
-                    color = "#32882f" if delta_kpi_0_2 > 0 else "#a03838"
+                    if delta_kpi_0_2 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_kpi_0_2 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
 
                     st.markdown(f"""
                         <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
@@ -534,18 +638,26 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                 with col3:
                     # DELTA para documentos únicos
                     if kpi_com[1] == 0:
-                        delta_kpi_1 = 100 if kpi[1] > 0 else 0
+                        delta_kpi_1 = 0
                     else:
                         delta_kpi_1 = ((kpi[1] - kpi_com[1]) / kpi_com[1]) * 100
+                    
                     if kpi_com2[1] == 0:
-                        delta_kpi_1_2 = 100 if kpi_com[1] > 0 else 0
+                        delta_kpi_1_2 = 0
                     else:
                         delta_kpi_1_2 = ((kpi_com[1] - kpi_com2[1]) / kpi_com2[1]) * 100
                     
 
                     delta = delta_kpi_1
-                    flecha = "🟢" if delta_kpi_1 > 0 else "🔴"
-                    color = "#32882f" if delta_kpi_1 > 0 else "#a03838"
+                    if delta_kpi_1 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_kpi_1 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
                     st.markdown(f"""
                         <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Documentos Únicos</div>
@@ -557,8 +669,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                     """, unsafe_allow_html=True)
 
                     delta = delta_kpi_1_2
-                    flecha = "🟢" if delta_kpi_1_2 > 0 else "🔴"    
-                    color = "#32882f" if delta_kpi_1_2 > 0 else "#a03838"
+                    if delta_kpi_1_2 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_kpi_1_2 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
                     st.markdown(f"""
                         <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
@@ -571,18 +690,25 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                 with col4:
                     # DELTA para monto total
                     if kpi_com[2] == 0:
-                        delta_kpi_2 = 100 if kpi[2] > 0 else 0
+                        delta_kpi_2 = 0
                     else:
                         delta_kpi_2 = ((kpi[2] - kpi_com[2]) / kpi_com[2]) * 100
                     if kpi_com2[2] == 0:
-                        delta_kpi_2_2 = 100 if kpi_com[2] > 0 else 0
+                        delta_kpi_2_2 = 0
                     else:
                         delta_kpi_2_2 = ((kpi_com[2] - kpi_com2[2]) / kpi_com2[2]) * 100
                     
 
                     delta = delta_kpi_2
-                    flecha = "🟢" if delta_kpi_2 > 0 else "🔴"
-                    color = "#32882f" if delta_kpi_2 > 0 else "#a03838"
+                    if delta_kpi_2 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_kpi_2 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
                     st.markdown(f"""
                         <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Monto Total</div>
@@ -594,8 +720,15 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                         </div>
                         """, unsafe_allow_html=True)
                     delta = delta_kpi_2_2
-                    flecha = "🟢" if delta_kpi_2_2 > 0 else "🔴"
-                    color = "#32882f" if delta_kpi_2_2 > 0 else "#a03838"
+                    if delta_kpi_2_2 > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta_kpi_2_2 < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"
                     st.markdown(f"""
                         <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
                         <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
@@ -654,6 +787,7 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
 # =======================================================================
 # ===================== NUEVO BLOQUE: GESTIONES =====================
 # =======================================================================
+
 
 def mostrar_gestiones(fecha_inicio, fecha_fin, db):
     fecha_fin_ajustada = fecha_fin + timedelta(days=1)
@@ -877,25 +1011,39 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     delta = ((total_gestiones - total_gestiones_com) / total_gestiones_com * 100) if total_gestiones_com != 0 else (100 if total_gestiones > 0 else 0)
-                    flecha = "🟢" if delta > 0 else " 🔴"
-                    color = "#32882f" if delta > 0 else "#a03838"
+                    if delta > 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color = "#32882f"
+                    elif delta < 0:
+                        flecha = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color = "#a03838"
+                    else: 
+                        flecha = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color = "#2A2828"  
+                    
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Total de Gestiones</div>
+                    <div style='color:#053e01ff;font-size:1.7rem'>📚 Total de Gestiones</div>
                     <div style='font-size:3rem'>{total_gestiones:,}</div>
                     <div style='color:{color};font-size:1.2rem'>
                             {flecha} {abs(delta):.2f}%
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-                    # st.metric("Total de Gestiones", f"{total_gestiones:,}")
-                    # st.metric("Gestiones - Período Anterior", f"{total_gestiones_com:,}")
+                    
                     delta2 = ((total_gestiones_com - total_gestiones_com2) / total_gestiones_com2 * 100) if total_gestiones_com2 != 0 else (100 if total_gestiones_com > 0 else 0)
-                    flecha2 = "🟢" if delta2 > 0 else " 🔴"
-                    color2 = "#32882f" if delta2 > 0 else "#a03838"
+                    if delta2 > 0:
+                        flecha2 = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2 = "#32882f"
+                    elif delta2 < 0:
+                        flecha2 = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2 = "#a03838"
+                    else: 
+                        flecha2 = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2 = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2}; border-right: 6px solid {color2};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.7rem'>📚 Período Anterior</div>
                     <div style='font-size:3rem'>{total_gestiones_com:,}</div>
                     <div style='color:{color2};font-size:1.2rem'>
                             {flecha2} {abs(delta2):.2f}%
@@ -906,11 +1054,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                 
                 with col2:
                     delta_doc = ((total_gestiones_doc - total_gestiones_doc_com) / total_gestiones_doc_com * 100) if total_gestiones_doc_com != 0 else (100 if total_gestiones_doc > 0 else 0)
-                    flecha_doc = "🟢" if delta_doc > 0 else " 🔴"
-                    color_doc = "#32882f" if delta_doc > 0 else "#a03838"
+                    if delta_doc > 0:
+                        flecha_doc = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_doc = "#32882f"
+                    elif delta_doc < 0:
+                        flecha_doc = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_doc = "#a03838"
+                    else: 
+                        flecha_doc = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_doc = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_doc}; border-right: 6px solid {color_doc};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Total de Documentos con Gestión</div>
+                    <div style='color:#053e01ff;font-size:1.7rem'>📋 Total de Documentos con Gestión</div>
                     <div style='font-size:3rem'>{total_gestiones_doc:,}</div>
                     <div style='color:{color_doc};font-size:1.2rem'>
                             {flecha_doc} {abs(delta_doc):.2f}%
@@ -919,11 +1074,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     """, unsafe_allow_html=True)
                     
                     delta2_doc = ((total_gestiones_doc_com - total_gestiones_doc_com2) / total_gestiones_doc_com2 * 100) if total_gestiones_doc_com2 != 0 else (100 if total_gestiones_doc_com > 0 else 0)
-                    flecha2_doc = "🟢" if delta2_doc > 0 else " 🔴"
-                    color2_doc = "#32882f" if delta2_doc > 0 else "#a03838"
+                    if delta2_doc > 0:
+                        flecha2_doc = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_doc = "#32882f"
+                    elif delta2_doc < 0:
+                        flecha2_doc = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_doc = "#a03838"
+                    else: 
+                        flecha2_doc = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_doc = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_doc}; border-right: 6px solid {color2_doc};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.7rem'>📋 Período Anterior</div>
                     <div style='font-size:3rem'>{total_gestiones_doc_com:,}</div>
                     <div style='color:{color2_doc};font-size:1.2rem'>
                             {flecha2_doc} {abs(delta2_doc):.2f}%
@@ -938,11 +1100,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
 
                 with col1:
                     delta_sms = ((total_sms - total_sms_com) / total_sms_com * 100) if total_sms_com != 0 else (100 if total_sms > 0 else 0)
-                    flecha_sms = "🟢" if delta_sms > 0 else " 🔴"
-                    color_sms = "#32882f" if delta_sms > 0 else "#a03838"
+                    if delta_sms > 0:
+                        flecha_sms = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_sms = "#32882f"
+                    elif delta_sms < 0:
+                        flecha_sms = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_sms = "#a03838"
+                    else:
+                        flecha_sms = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_sms = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_sms}; border-right: 6px solid {color_sms};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>SMS Enviados</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>📲 SMS Enviados</div>
                     <div style='font-size:3rem'>{total_sms:,}</div>
                     <div style='color:{color_sms};font-size:1.2rem'>
                             {flecha_sms} {abs(delta_sms):.2f}%
@@ -950,11 +1119,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                     delta2_sms = ((total_sms_com - total_sms_com2) / total_sms_com2 * 100) if total_sms_com2 != 0 else (100 if total_sms_com > 0 else 0)
-                    flecha2_sms = "🟢" if delta2_sms > 0 else " 🔴"
-                    color2_sms = "#32882f" if delta2_sms > 0 else "#a03838"
+                    if delta2_sms > 0:
+                        flecha2_sms = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_sms = "#32882f"
+                    elif delta2_sms < 0:
+                        flecha2_sms = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_sms = "#a03838"
+                    else:
+                        flecha2_sms = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_sms = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_sms}; border-right: 6px solid {color2_sms};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>📲 Período Anterior</div>
                     <div style='font-size:3rem'>{total_sms_com:,}</div>
                     <div style='color:{color2_sms};font-size:1.2rem'>
                             {flecha2_sms} {abs(delta2_sms):.2f}%
@@ -964,11 +1140,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     st.metric("SMS Enviados - Hace 2 Períodos", f"{total_sms_com2:,}")
                 with col2:
                     delta_whatsapp = ((total_whatsapp - total_whatsapp_com) / total_whatsapp_com * 100) if total_whatsapp_com != 0 else (100 if total_whatsapp > 0 else 0)
-                    flecha_whatsapp = "🟢" if delta_whatsapp > 0 else " 🔴"
-                    color_whatsapp = "#32882f" if delta_whatsapp > 0 else "#a03838"
+                    if delta_whatsapp > 0:
+                        flecha_whatsapp = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_whatsapp = "#32882f"
+                    elif delta_whatsapp < 0:
+                        flecha_whatsapp = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_whatsapp = "#a03838"
+                    else:
+                        flecha_whatsapp = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_whatsapp = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_whatsapp}; border-right: 6px solid {color_whatsapp};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Gestiones por WhatsApp</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'><img src="data:image/png;base64,{img_base64}" style="width:35px"> Gestión WhatsApp</div>
                     <div style='font-size:3rem'>{total_whatsapp:,}</div>
                     <div style='color:{color_whatsapp};font-size:1.2rem'>
                             {flecha_whatsapp} {abs(delta_whatsapp):.2f}%
@@ -976,11 +1159,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                     delta2_whatsapp = ((total_whatsapp_com - total_whatsapp_com2) / total_whatsapp_com2 * 100) if total_whatsapp_com2 != 0 else (100 if total_whatsapp_com > 0 else 0)
-                    flecha2_whatsapp = "🟢" if delta2_whatsapp > 0 else " 🔴"
-                    color2_whatsapp = "#32882f" if delta2_whatsapp > 0 else "#a03838"
+                    if delta2_whatsapp > 0:
+                        flecha2_whatsapp = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_whatsapp = "#32882f"
+                    elif delta2_whatsapp < 0:
+                        flecha2_whatsapp = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_whatsapp = "#a03838"
+                    else:
+                        flecha2_whatsapp = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_whatsapp = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_whatsapp}; border-right: 6px solid {color2_whatsapp};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'><img src="data:image/png;base64,{img_base64}" style="width:35px"> Período Anterior</div>
                     <div style='font-size:3rem'>{total_whatsapp_com:,}</div>
                     <div style='color:{color2_whatsapp};font-size:1.2rem'>
                             {flecha2_whatsapp} {abs(delta2_whatsapp):.2f}%
@@ -990,11 +1180,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     st.metric("Gestiones por WhatsApp - Hace 2 Períodos", f"{total_whatsapp_com2:,}")
                 with col3:
                     delta_chat = ((total_chat - total_chat_com) / total_chat_com * 100) if total_chat_com != 0 else (100 if total_chat > 0 else 0)
-                    flecha_chat = "🟢" if delta_chat > 0 else " 🔴"
-                    color_chat = "#32882f" if delta_chat > 0 else "#a03838"
+                    if delta_chat > 0:
+                        flecha_chat = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_chat = "#32882f"
+                    elif delta_chat < 0:
+                        flecha_chat = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_chat = "#a03838"
+                    else:
+                        flecha_chat = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_chat = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_chat}; border-right: 6px solid {color_chat};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Gestiones por Chat</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>📱 Gestiones por Chat</div>
                     <div style='font-size:3rem'>{total_chat:,}</div>
                     <div style='color:{color_chat};font-size:1.2rem'>
                             {flecha_chat} {abs(delta_chat):.2f}%
@@ -1002,11 +1199,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                     delta2_chat = ((total_chat_com - total_chat_com2) / total_chat_com2 * 100) if total_chat_com2 != 0 else (100 if total_chat_com > 0 else 0)
-                    flecha2_chat = "🟢" if delta2_chat > 0 else " 🔴"
-                    color2_chat = "#32882f" if delta2_chat > 0 else "#a03838"
+                    if delta2_chat > 0:
+                        flecha2_chat = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_chat = "#32882f"
+                    elif delta2_chat < 0:
+                        flecha2_chat = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_chat = "#a03838"
+                    else:
+                        flecha2_chat = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_chat = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_chat}; border-right: 6px solid {color2_chat};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>📱 Período Anterior</div>
                     <div style='font-size:3rem'>{total_chat_com:,}</div>
                     <div style='color:{color2_chat};font-size:1.2rem'>
                             {flecha2_chat} {abs(delta2_chat):.2f}%
@@ -1016,11 +1220,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     st.metric("Gestiones por Chat - Hace 2 Períodos", f"{total_chat_com2:,}")
                 with col4:
                     delta_campanas = ((total_campanas - total_campanas_com) / total_campanas_com * 100) if total_campanas_com != 0 else (100 if total_campanas > 0 else 0)
-                    flecha_campanas = "🟢" if delta_campanas > 0 else " 🔴"
-                    color_campanas = "#32882f" if delta_campanas > 0 else "#a03838"
+                    if delta_campanas > 0:
+                        flecha_campanas = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_campanas = "#32882f"
+                    elif delta_campanas < 0:
+                        flecha_campanas = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_campanas = "#a03838"
+                    else:
+                        flecha_campanas = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_campanas = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_campanas}; border-right: 6px solid {color_campanas};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Contactos Predictivos</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>🤖 Contactos Predictivos</div>
                     <div style='font-size:3rem'>{total_campanas:,}</div>
                     <div style='color:{color_campanas};font-size:1.2rem'>
                             {flecha_campanas} {abs(delta_campanas):.2f}%
@@ -1028,11 +1239,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                     delta2_campanas = ((total_campanas_com - total_campanas_com2) / total_campanas_com2 * 100) if total_campanas_com2 != 0 else (100 if total_campanas_com > 0 else 0)
-                    flecha2_campanas = "🟢" if delta2_campanas > 0 else " 🔴"
-                    color2_campanas = "#32882f" if delta2_campanas > 0 else "#a03838"
+                    if delta2_campanas > 0:
+                        flecha2_campanas = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_campanas = "#32882f"
+                    elif delta2_campanas < 0:
+                        flecha2_campanas = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_campanas = "#a03838"
+                    else:
+                        flecha2_campanas = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_campanas = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_campanas}; border-right: 6px solid {color2_campanas};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>🤖 Período Anterior</div>
                     <div style='font-size:3rem'>{total_campanas_com:,}</div>
                     <div style='color:{color2_campanas};font-size:1.2rem'>
                             {flecha2_campanas} {abs(delta2_campanas):.2f}%
@@ -1042,11 +1260,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     st.metric("Contactos Predictivos - Hace 2 Períodos", f"{total_campanas_com2:,}")
                 with col5:
                     delta_manual = ((total_manual - total_manual_com) / total_manual_com * 100) if total_manual_com != 0 else (100 if total_manual > 0 else 0)
-                    flecha_manual = "🟢" if delta_manual > 0 else " 🔴"
-                    color_manual = "#32882f" if delta_manual > 0 else "#a03838"
+                    if delta_manual > 0:
+                        flecha_manual = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_manual = "#32882f"
+                    elif delta_manual < 0:
+                        flecha_manual = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_manual = "#a03838"
+                    else:
+                        flecha_manual = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_manual = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_manual}; border-right: 6px solid {color_manual};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Contactos Manuales</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>📞 Contactos Manuales</div>
                     <div style='font-size:3rem'>{total_manual:,}</div>
                     <div style='color:{color_manual};font-size:1.2rem'>
                             {flecha_manual} {abs(delta_manual):.2f}%
@@ -1054,11 +1279,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                     delta2_manual = ((total_manual_com - total_manual_com2) / total_manual_com2 * 100) if total_manual_com2 != 0 else (100 if total_manual_com > 0 else 0)
-                    flecha2_manual = "🟢" if delta2_manual > 0 else " 🔴"
-                    color2_manual = "#32882f" if delta2_manual > 0 else "#a03838"
+                    if delta2_manual > 0:
+                        flecha2_manual = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_manual = "#32882f"
+                    elif delta2_manual < 0:
+                        flecha2_manual = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_manual = "#a03838"
+                    else:
+                        flecha2_manual = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_manual = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_manual}; border-right: 6px solid {color2_manual};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>📞 Período Anterior</div>
                     <div style='font-size:3rem'>{total_manual_com:,}</div>
                     <div style='color:{color2_manual};font-size:1.2rem'>
                             {flecha2_manual} {abs(delta2_manual):.2f}%
@@ -1068,11 +1300,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     st.metric("Contactos Manuales - Hace 2 Períodos", f"{total_manual_com2:,}")
                 with col6:
                     delta_no_conectadas = ((total_no_conectadas - total_no_conectadas_com) / total_no_conectadas_com * 100) if total_no_conectadas_com != 0 else (100 if total_no_conectadas > 0 else 0)
-                    flecha_no_conectadas = "🟢" if delta_no_conectadas > 0 else " 🔴"
-                    color_no_conectadas = "#32882f" if delta_no_conectadas > 0 else "#a03838"
+                    if delta_no_conectadas > 0:
+                        flecha_no_conectadas = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color_no_conectadas = "#a03838"
+                    elif delta_no_conectadas < 0:
+                        flecha_no_conectadas = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color_no_conectadas = "#32882f"
+                    else:
+                        flecha_no_conectadas = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color_no_conectadas = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color_no_conectadas}; border-right: 6px solid {color_no_conectadas};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Contactos No Conectados</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>🚫 Llamadas No Conectados</div>
                     <div style='font-size:3rem'>{total_no_conectadas:,}</div>
                     <div style='color:{color_no_conectadas};font-size:1.2rem'>
                             {flecha_no_conectadas} {abs(delta_no_conectadas):.2f}%
@@ -1080,11 +1319,18 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     </div>
                     """, unsafe_allow_html=True)
                     delta2_no_conectadas = ((total_no_conectadas_com - total_no_conectadas_com2) / total_no_conectadas_com2 * 100) if total_no_conectadas_com2 != 0 else (100 if total_no_conectadas_com > 0 else 0)
-                    flecha2_no_conectadas = "🟢" if delta2_no_conectadas > 0 else " 🔴"
-                    color2_no_conectadas = "#32882f" if delta2_no_conectadas > 0 else "#a03838"
+                    if delta2_no_conectadas > 0:
+                        flecha2_no_conectadas = f"<img src='data:image/png;base64,{img_base64_down_arrow}' style='width:24px'>"
+                        color2_no_conectadas = "#a03838"
+                    elif delta2_no_conectadas < 0:
+                        flecha2_no_conectadas = f"<img src='data:image/png;base64,{img_base64_up_arrow}' style='width:24px'>"
+                        color2_no_conectadas = "#32882f"
+                    else:
+                        flecha2_no_conectadas = f"<img src='data:image/png;base64,{img_base64_line}' style='width:24px'>"
+                        color2_no_conectadas = "#2A2828"
                     st.markdown(f"""
                     <div style='background:#E0E0E0;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color2_no_conectadas}; border-right: 6px solid {color2_no_conectadas};'>
-                    <div style='color:#053e01ff;font-size:1.7rem'>Período Anterior</div>
+                    <div style='color:#053e01ff;font-size:1.5rem'>🚫 Período Anterior</div>
                     <div style='font-size:3rem'>{total_no_conectadas_com:,}</div>
                     <div style='color:{color2_no_conectadas};font-size:1.2rem'>
                             {flecha2_no_conectadas} {abs(delta2_no_conectadas):.2f}%
