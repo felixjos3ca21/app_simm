@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS bases (
     telefono VARCHAR(30),
     archivo_origen VARCHAR(100) NOT NULL,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    estado_telefono VARCHAR(60)
+    estado_telefono VARCHAR(60),
+    base_cleaned VARCHAR(100)
 );
 
 -- Crear tabla GESTIONES
@@ -46,16 +47,32 @@ CREATE TABLE IF NOT EXISTS gestiones (
 );
 
 -- Crear tabla PAGOS
-CREATE TABLE IF NOT EXISTS pagos (
-    id_registro VARCHAR(64),
-    nro_acuerdo VARCHAR(20),
-    nro_comparendo VARCHAR(60),
-    documento VARCHAR(20) NOT NULL,
-    nombre_usuario VARCHAR(100) NOT NULL,
-    valor NUMERIC(15,2) NOT NULL,
-    fecha_pago TIMESTAMP NOT NULL,
-    archivo_origen VARCHAR(75) NOT NULL,
-    identificador_infraccion VARCHAR(60),
+CREATE TABLE pagos (
+    id_registro SERIAL PRIMARY KEY,
+    codcliente VARCHAR(50),
+    nitcliente VARCHAR(50),
+    numobligacion VARCHAR(50),
+    fechapago DATE,
+    valorpago NUMERIC,
+    base VARCHAR(100),
+    fecha_gest DATE,
+    aplica_pago_gestion VARCHAR(20),
+    fecha_sms DATE,
+    campania VARCHAR(50),
+    aplica_pago_sms VARCHAR(50),
+    aplicacion_final VARCHAR(50),
+    fecha_sencilla DATE,
+    anio VARCHAR(50),
+    dia VARCHAR(50),
+    mes VARCHAR(50),
+    semana VARCHAR(50),
+    numero_mes INTEGER,
+    nombre_dia_semana VARCHAR(20),
+    cruce_sms VARCHAR(50),
+    estrategia VARCHAR(100),
+    infraccion VARCHAR(100),
+    periodo_21_20 VARCHAR(50),
+    archivo_origen VARCHAR(255),
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -76,52 +93,6 @@ CREATE TABLE IF NOT EXISTS SMS (
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Crear tabla PAGOS_AP
-CREATE TABLE IF NOT EXISTS pagos_ap (
-    nro_acuerdo VARCHAR(50),
-    id_usuario VARCHAR(20),
-    valor NUMERIC(15, 2),
-    fecha_liquida TIMESTAMP,
-    consecutivo_cuota VARCHAR(50),
-    nombre_usuario VARCHAR(150),
-    documento VARCHAR(30),
-    archivo_origen VARCHAR(100),
-    fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    tipo_pago VARCHAR(10),
-    id_registro VARCHAR(64) PRIMARY KEY
-);
-
--- Crear tabla PAGOS_COMPARENDOS
-CREATE TABLE IF NOT EXISTS pagos_comparendos (
-    nro_comparendo VARCHAR(60),
-    nro_recibo VARCHAR(30),
-    fecha_liquida TIMESTAMP,
-    compute_0004 NUMERIC(15, 2),
-    id_usuario VARCHAR(20),
-    nro_resolucion VARCHAR(50),
-    intereses NUMERIC(15, 2),
-    nombre_usuario VARCHAR(150),
-    valor NUMERIC(15, 2),
-    documento VARCHAR(30),
-    archivo_origen VARCHAR(100),
-    fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    tipo_pago VARCHAR(10),
-    id_registro VARCHAR(64) PRIMARY KEY
-);
-
-
--- Crear tabla ARCHIVOS_PROCESADOS_PAGOS
-CREATE TABLE IF NOT EXISTS archivos_procesados_pagos (
-    id SERIAL PRIMARY KEY,
-    nombre_archivo VARCHAR(255) NOT NULL,
-    ruta_archivo VARCHAR(500) NOT NULL,
-    tipo_archivo VARCHAR(20) NOT NULL,
-    fecha_procesamiento TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    registros_procesados INTEGER NOT NULL,
-    estado VARCHAR(20) NOT NULL,
-    hash_archivo VARCHAR(32) NOT NULL,
-    UNIQUE(ruta_archivo)
-);
 
 CREATE TABLE IF NOT EXISTS tipificaciones_3 (
                 conn_id TEXT,
@@ -182,23 +153,90 @@ CREATE TABLE IF NOT EXISTS campanas_3 (
                 archivo_origen TEXT
             );
 
-CREATE TABLE IF NOT EXISTS archivos_procesados_campanas_3 (
-                    id SERIAL PRIMARY KEY,
-                    nombre_archivo VARCHAR(255) UNIQUE NOT NULL,
-                    fecha_procesado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    registros_insertados INTEGER,
-                    estado VARCHAR(20) DEFAULT 'completado',
-                    intentos INTEGER DEFAULT 1,
-                    error_message TEXT
-                )
+CREATE TABLE archivos_procesados_camp_3 (
+    id INTEGER NOT NULL DEFAULT nextval('archivos_procesados_camp_3_id_seq'::regclass) PRIMARY KEY,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    fecha_procesado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    registros_insertados INTEGER,
+    estado VARCHAR(20) DEFAULT 'completado'::VARCHAR,
+    intentos INTEGER DEFAULT 1,
+    error_message TEXT
+);
 
 
+CREATE TABLE archivos_procesados_ase2 (
+    id INTEGER NOT NULL DEFAULT nextval('archivos_procesados_ase2_id_seq'::regclass) PRIMARY KEY,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    fecha_procesado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    registros_insertados INTEGER,
+    estado VARCHAR(20) DEFAULT 'completado'::VARCHAR,
+    intentos INTEGER DEFAULT 1,
+    error_type VARCHAR(100),
+    error_message TEXT,
+    error_details TEXT,
+    stack_trace TEXT,
+    fecha_error TIMESTAMP,
+    no_valid_records BOOLEAN DEFAULT FALSE
+);
 
--- Crear vista materializada si no existe
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_id_gestiones AS
-SELECT DISTINCT documento, numero_comparendo
-FROM gestiones
-WHERE documento IS NOT NULL AND numero_comparendo IS NOT NULL;
+
+CREATE TABLE archivos_procesados_cdr5 (
+    id INTEGER NOT NULL DEFAULT nextval('archivos_procesados_cdr5_id_seq'::regclass) PRIMARY KEY,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    fecha_procesado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    registros_insertados INTEGER,
+    estado VARCHAR(20) DEFAULT 'completado'::VARCHAR,
+    intentos INTEGER DEFAULT 1,
+    error_message TEXT,
+    error_type VARCHAR(100),
+    error_details TEXT,
+    stack_trace TEXT,
+    fecha_error TIMESTAMP,
+    no_valid_records BOOLEAN DEFAULT FALSE
+);
+
+
+CREATE TABLE asesor_2 (
+    agent_id TEXT,
+    agent_status TEXT,
+    time BIGINT,
+    date_ini TIMESTAMP,
+    date_end TIMESTAMP,
+    conn_id TEXT,
+    type_interaction TEXT,
+    destiny TEXT,
+    telephone TEXT,
+    campaign_id TEXT,
+    agent_dni TEXT,
+    agent_name TEXT,
+    module TEXT,
+    day INTEGER,
+    month INTEGER,
+    month_name TEXT,
+    week TEXT,
+    date TIMESTAMP,
+    archivo_origen TEXT
+);
+
+DROP TABLE IF EXISTS cdr_5;
+
+CREATE TABLE cdr_5 (
+    agent_name TEXT,
+    date TIMESTAMP,
+    destiny TEXT,
+    telephone TEXT,
+    ring_time TEXT,
+    result TEXT,
+    type_interaction TEXT,
+    customer_id TEXT,
+    campaign_id TEXT,
+    agent_id TEXT,
+    conn_id TEXT,
+    module TEXT,
+    archivo_origen TEXT,
+    fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- Crear índices para optimizar rendimiento
 CREATE INDEX IF NOT EXISTS idx_bases_documento ON bases(documento);

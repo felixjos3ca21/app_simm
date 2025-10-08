@@ -776,10 +776,10 @@ class StreamlitUI:
         col1, col2, col3 = st.columns([1,6,1])
         with col2:  
             tabla_map = {
-                "🧮 Carga de Gestiones": "gestiones",
-                "📲 Carga de SMS": "sms",
-                "💰 Carga de Pagos": "pagos",
-                "📋 Carga de Bases": "bases"
+                "📊 Gestiones": "gestiones",
+                "📱 SMS": "sms",
+                "💰 Pagos": "pagos",
+                "📋 Bases": "bases"
             }
             tabla = tabla_map.get(st.session_state.modulo_actual)
             if tabla:
