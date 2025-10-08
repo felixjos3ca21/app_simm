@@ -551,7 +551,7 @@ def mostrar_cartera(fecha_inicio, fecha_fin, db):
                         
                     st.markdown(f"""
                         <div style='background:#F5F5F5;padding:1rem;border-radius:10px;text-align:left; border-bottom: 6px solid {color}; border-right: 6px solid {color};'>
-                        <div style='color:#053e01ff;font-size:1.7rem'>Cantidad de Bases Asigandas</div>
+                        <div style='color:#053e01ff;font-size:1.7rem'>Cantidad de Bases Asignadas</div>
                         <div style='font-size:3rem'>{cantidad_bases_unicas:,}</div>
                         <div style='color:{color};font-size:1.2rem'>
                             {flecha} {(delta_pct):.2f}%
@@ -804,37 +804,37 @@ def mostrar_gestiones(fecha_inicio, fecha_fin, db):
                     SELECT
                         count(distinct id_gestion) AS total_gestiones
                     FROM gestiones
-                    where fecha_gestion between :fecha_inicio and :fecha_fin
+                    where fecha_gestion_sencilla between :fecha_inicio and :fecha_fin
                 """)
                 query_cuenta_gestiones_id_act_com = text("""
                     SELECT
                         count(distinct id_gestion) AS total_gestiones
                     FROM gestiones
-                    where fecha_gestion between :fecha_inicio_com and :fecha_fin_com
+                    where fecha_gestion_sencilla between :fecha_inicio_com and :fecha_fin_com
                 """)
                 query_cuenta_gestiones_id_act_com2 = text("""
                     SELECT
                         count(distinct id_gestion) AS total_gestiones
                     FROM gestiones
-                    where fecha_gestion between :fecha_inicio_com2 and :fecha_fin_com2
+                    where fecha_gestion_sencilla between :fecha_inicio_com2 and :fecha_fin_com2
                 """)
                 query_cuenta_gestiones_doc_act = text("""
                     SELECT
                         count(distinct documento) AS total_gestiones_doc
                     FROM gestiones
-                    where fecha_gestion between :fecha_inicio and :fecha_fin
+                    where fecha_gestion_sencilla between :fecha_inicio and :fecha_fin
                 """)
                 query_cuenta_gestiones_doc_act_com = text("""
                     SELECT
                         count(distinct documento) AS total_gestiones_doc
                     FROM gestiones
-                    where fecha_gestion between :fecha_inicio_com and :fecha_fin_com
+                    where fecha_gestion_sencilla between :fecha_inicio_com and :fecha_fin_com
                 """)
                 query_cuenta_gestiones_doc_com2 = text("""
                     SELECT
                         count(distinct documento) AS total_gestiones_doc
                     FROM gestiones
-                    where fecha_gestion between :fecha_inicio_com2 and :fecha_fin_com2
+                    where fecha_gestion_sencilla between :fecha_inicio_com2 and :fecha_fin_com2
                 """)
                 query_cuenta_sms_act = text("""
                     SELECT

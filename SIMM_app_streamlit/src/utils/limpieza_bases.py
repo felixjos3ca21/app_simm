@@ -238,6 +238,7 @@ def preparar_datos_bases(ruta_archivo: str, nombre_archivo: str, update_progress
         # Campos adicionales con validación
         df_final['archivo_origen'] = nombre_archivo[:100]
         df_final['fecha_carga'] = datetime.now()
+        df_final['base_cleaned'] = ''
 
         # =============================================================================
         # 8. Validación avanzada de datos

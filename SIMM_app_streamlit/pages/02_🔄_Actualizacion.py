@@ -629,7 +629,8 @@ class BasesProcessor(DataProcessor):
                 'CEL1': 'telefono',
                 'archivo_origen': 'archivo_origen',
                 'fecha_carga': 'fecha_carga',
-                'eatado_telefono': 'estado_telefono'
+                'estado_telefono': 'estado_telefono',
+                'base_cleaned': 'base_cleaned'
             },
             'id_column': 'id_registro',
             'clean_function': preparar_datos_bases
