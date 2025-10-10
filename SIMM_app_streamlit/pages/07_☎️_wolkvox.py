@@ -248,6 +248,10 @@ def show_tipificacion_3_ui():
                 else:
                     st.info("No hay archivos procesados previamente")
 
+        # Información sobre corrección automática de estados
+        if len(files['failed']) == 0 and len(files['processed']) > 0:
+            st.info("ℹ️ Los estados de archivos se corrigen automáticamente. Los archivos sin registros válidos aparecen como 'procesados'.")
+
         # Botón de procesamiento - Solo archivos nuevos
         if len(files['new']) > 0:
             st.markdown("<h2 class='section-header'>🚀 Procesamiento</h2>", unsafe_allow_html=True)
@@ -282,7 +286,6 @@ def show_tipificacion_3_ui():
                 failed = 0
                 total_processed = 0
                 total_to_process = len(files['new'])  # Solo archivos nuevos
-                results_list = []  # Para almacenar todos los resultados
                 
                 # Solo procesar archivos nuevos
                 for i, filename in enumerate(files['new']):
@@ -301,26 +304,13 @@ def show_tipificacion_3_ui():
                     result = processor._process_single_file(
                         os.path.join(st.session_state.selected_folder_tip3, filename)
                     )
-                    results_list.append(result)
                     
                     if result['success']:
-                        if result.get('no_valid_records', False):
-                            # Caso especial: archivo sin registros válidos
-                            log_messages.append(
-                                f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Archivo sin registros válidos: "
-                                f"{result['error']}"
-                            )
-                            # No incrementar contador de éxitos/fallos
-                        else:
-                            successful += 1
-                            log_messages.append(
-                                f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Éxito: {result['records']} registros"
-                            )
+                        successful += 1
+                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Éxito: {result['records']} registros")
                     else:
                         failed += 1
-                        log_messages.append(
-                            f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error: {result['error'][:100]}..."
-                        )
+                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error: {result['error'][:100]}...")
                     
                     success_metric.metric("✅ Exitosos", successful)
                     error_metric.metric("❌ Fallidos", failed)
@@ -329,41 +319,16 @@ def show_tipificacion_3_ui():
                 progress_bar.progress(1.0)
                 status_text.text("🎉 Procesamiento completado")
                 current_file.empty()
-
-                # Mostrar archivos sin registros válidos
-                empty_files = []
-                for r in results_list:
-                    if isinstance(r, dict) and r.get('no_valid_records', False):
-                        empty_files.append(r['filename'])
-
-                if empty_files:
-                    st.markdown("""
-                    <div class='warning-box'>
-                        <h3>⚠️ Archivos sin Registros Válidos</h3>
-                        <p>Los siguientes archivos no contenían registros con module='andes-movilidadtigo':</p>
-                        <ul>
-                    """, unsafe_allow_html=True)
-                    
-                    for filename in empty_files:
-                        st.markdown(f"<li>{filename}</li>", unsafe_allow_html=True)
-                    
-                    st.markdown("""
-                        </ul>
-                        <p>Estos archivos fueron procesados correctamente pero no agregaron registros a la base de datos.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
                 
                 # Mostrar resumen final
-                total_processed_successfully = successful + len(empty_files)
-                if total_processed_successfully == len(files['new']) and failed == 0:
+                if successful == total_to_process:
                     st.markdown(f"""
                     <div class='success-box'>
                         <h3>🎉 Procesamiento Completado Exitosamente</h3>
                         <p><strong>Todos los archivos fueron procesados correctamente:</strong></p>
                         <ul>
-                            <li>✅ Archivos con registros: {successful}</li>
-                            <li>⚠️ Archivos sin registros válidos: {len(empty_files)}</li>
-                            <li>📊 Total de archivos: {len(files['new'])}</li>
+                            <li>✅ Archivos exitosos: {successful}</li>
+                            <li>📊 Total de archivos: {total_to_process}</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -375,8 +340,7 @@ def show_tipificacion_3_ui():
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>⚠️ Archivos sin registros válidos: {len(empty_files)}</li>
-                            <li>📊 Total procesados: {len(files['new'])}</li>
+                            <li>📊 Total procesados: {total_to_process}</li>
                         </ul>
                         <p><strong>Recomendación:</strong> Revisa los logs para identificar los errores en los archivos fallidos.</p>
                     </div>
@@ -388,8 +352,7 @@ def show_tipificacion_3_ui():
                         <p><strong>Ningún archivo pudo ser procesado exitosamente:</strong></p>
                         <ul>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>⚠️ Archivos sin registros válidos: {len(empty_files)}</li>
-                            <li>📊 Total intentados: {len(files['new'])}</li>
+                            <li>📊 Total intentados: {total_to_process}</li>
                         </ul>
                         <p><strong>Sugerencias:</strong></p>
                         <ul>

@@ -414,6 +414,53 @@ class DataIngestorTip3:
                     logger.info(f"Archivos procesados en BD: {len(processed)}")
                     logger.info(f"Archivos fallidos en BD: {len(failed)}")
                     
+                    # Corrección automática de estados para archivos fallidos sin registros válidos
+                    if failed:
+                        logger.info("Verificando archivos fallidos para corrección automática de estados...")
+                        corrected_files = []
+                        
+                        for filename in failed:
+                            file_path = os.path.join(folder_path, filename)
+                            
+                            # Verificar si el archivo existe en la carpeta
+                            if not os.path.exists(file_path):
+                                continue
+                                
+                            try:
+                                # Leer y transformar el archivo para verificar registros válidos
+                                encoding = self._detect_file_encoding(file_path)
+                                df = pd.read_csv(file_path, encoding=encoding, engine='python', on_bad_lines='warn')
+                                df_transformed = self._transform_data(df, filename)
+                                
+                                # Si no tiene registros válidos, corregir el estado automáticamente
+                                if len(df_transformed) == 0:
+                                    conn.execute(
+                                        text(f"""
+                                            UPDATE {self.control_table} 
+                                            SET estado = 'completado',
+                                                error_message = 'Archivo sin registros con module=andes-movilidadtigo - Estado corregido automáticamente',
+                                                fecha_procesado = CURRENT_TIMESTAMP,
+                                                registros_insertados = 0
+                                            WHERE nombre_archivo = :filename
+                                        """),
+                                        {'filename': filename}
+                                    )
+                                    corrected_files.append(filename)
+                                    logger.info(f"Estado corregido automáticamente para: {filename}")
+                                    
+                            except Exception as e:
+                                logger.warning(f"No se pudo verificar archivo {filename} para corrección automática: {str(e)}")
+                                continue
+                        
+                        # Actualizar listas después de la corrección
+                        if corrected_files:
+                            logger.info(f"Se corrigieron automáticamente {len(corrected_files)} archivos")
+                            # Mover archivos corregidos de failed a processed
+                            for filename in corrected_files:
+                                if filename in failed:
+                                    failed.remove(filename)
+                                    processed.append(filename)
+                    
             except Exception as db_error:
                 logger.error(f"Error consultando base de datos: {str(db_error)}")
                 # En caso de error de BD, consideramos todos como nuevos por seguridad
