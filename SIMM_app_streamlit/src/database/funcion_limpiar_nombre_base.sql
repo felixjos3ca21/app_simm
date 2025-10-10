@@ -28,6 +28,7 @@ BEGIN
         WHEN valor_base = '50% DCTO' THEN '50% DCTO'
         WHEN valor_base = '50%DCTO' THEN '50% DCTO'
         WHEN valor_base = 'DCTO 50%' THEN '50% DCTO'
+		WHEN valor_base = 'CAMPAÑA 50%DCTO' THEN '50% DCTO'
         
         -- ============ 70-30 ============
         WHEN valor_base = '70-30' THEN '70-30'
@@ -48,6 +49,7 @@ BEGIN
         
         -- ============ AVISO ============
         WHEN valor_base = 'AVISO AGOSTO' THEN 'AVISO'
+		WHEN valor_base = 'AVISO PREVIO JUNIO' THEN 'AVISO'
         WHEN valor_base = 'AVISO DCTO 25%' THEN 'AVISO'
         WHEN valor_base = 'AVISO DICIEMBRE 50%' THEN 'AVISO'
         WHEN valor_base = 'AVISO ENERO 25%' THEN 'AVISO'
@@ -92,13 +94,16 @@ BEGIN
         WHEN valor_base = 'CARTERA MOROSA' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS 2019 A 2023' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS N1 2DA PARTE' THEN 'BD MOROSOS'
+		WHEN valor_base = 'MOROSOS N2 2021 A 2025' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS 2022 A 2024' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS 2024 - 2025' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS 2023 A 2025' THEN 'BD MOROSOS'
+		WHEN valor_base = 'MOROSOS N1 2DA PARTE' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS 2012 AL 2014' THEN 'BD MOROSOS'
         WHEN valor_base = 'MOROSOS URGENTE' THEN 'BD MOROSOS'
         WHEN valor_base = 'NUEVA CAMPA?A SEGUNDO BARRIDOS DE CON' THEN 'BD MOROSOS'
         WHEN valor_base = 'NUEVOS MOROSOS' THEN 'BD MOROSOS'
+		WHEN valor_base = 'NUEVOS MOROSOS COMPRA DE DATOS' THEN 'BD MOROSOS'
         WHEN valor_base = 'NUEVOS MOROSOS COACTIVOS' THEN 'BD MOROSOS'
         WHEN valor_base = 'RECIEN CONFORMADOS (NUEVOS MOROSOS)' THEN 'BD MOROSOS'
         
@@ -149,6 +154,7 @@ BEGIN
         WHEN valor_base = 'IS MARZO SIN REGISTRO' THEN 'IMPOSICION DIARIA'
         WHEN valor_base = 'IS SEGUNDO BARRIDO' THEN 'IMPOSICION DIARIA'
         WHEN valor_base = 'IMPOSICION DIARI' THEN 'IMPOSICION DIARIA'
+		WHEN valor_base = 'COMPRA DATOS IMPOSICION' THEN 'IMPOSICION DIARIA'
         WHEN valor_base = 'IMPOSICION DIARIO' THEN 'IMPOSICION DIARIA'
         WHEN valor_base = 'IMPOSICIO''N DIARIA' THEN 'IMPOSICION DIARIA'
         WHEN valor_base = 'ID SEGUNDO BARRIDO' THEN 'IMPOSICION DIARIA'
@@ -180,14 +186,15 @@ BEGIN
         WHEN valor_base = 'NOTIFICACION' THEN 'NOTIFICACION'
         
         -- ============ USUARIOS LOCALIZADOS ============
-        WHEN valor_base = 'USUARIOS LOCALIZADOS' THEN 'USUARIOS LOCALIZADOS'
-        WHEN valor_base = 'USUARIOS SIN CONTACTO FEBRERO FD' THEN 'USUARIOS LOCALIZADOS'
-        WHEN valor_base = 'USUARIOS ILOCALIZADOS' THEN 'USUARIOS LOCALIZADOS'
-        WHEN valor_base = 'NUEVA CAMPAÑA USUARIOS SIN DATOS DE CONTACTO' THEN 'USUARIOS LOCALIZADOS'
+        WHEN valor_base = 'USUARIOS LOCALIZADOS' THEN 'USUARIOS ILOCALIZADOS'
+        WHEN valor_base = 'USUARIOS SIN CONTACTO FEBRERO FD' THEN 'USUARIOS ILOCALIZADOS'
+        WHEN valor_base = 'USUARIOS ILOCALIZADOS' THEN 'USUARIOS ILOCALIZADOS'
+        WHEN valor_base = 'NUEVA CAMPAÑA USUARIOS SIN DATOS DE CONTACTO' THEN 'USUARIOS ILOCALIZADOS'
         
         -- ============ VEHICULOS RETENIDOS ============
         WHEN valor_base = 'CARTERA VEHICULOS RETENIDOS' THEN 'VEHICULOS RETENIDOS'
         WHEN valor_base = 'VEHICULOS RETENIDOS' THEN 'VEHICULOS RETENIDOS'
+		WHEN valor_base = 'CAMPAÑA VEHICULOS RETIRADOS' THEN 'VEHICULOS RETENIDOS'
         
         -- Valor por defecto (sin cambios)
         ELSE valor_base
@@ -211,6 +218,12 @@ from bases
 GROUP by Base_cleaned
 ORDER by cantidad DESC
 
+SELECT base, count(*) as cantidad
+from bases
+where	bases.fecha_entrega >= '2025-10-01'
+	and bases.fecha_entrega <= '2025-10-09'
+GROUP by base
+ORDER by cantidad DESC
 
 SELECT base, base_cleaned from bases
 

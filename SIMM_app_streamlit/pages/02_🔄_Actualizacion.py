@@ -670,10 +670,29 @@ def get_db_connection():
 def obtener_ultima_insercion(engine, tabla, columna_fecha="fecha_carga"):
     try:
         with engine.connect() as conn:
+            # Verificar si la tabla existe
+            result = conn.execute(text(f"SELECT to_regclass('{tabla}')"))
+            if result.scalar() is None:
+                logger.warning(f"Tabla '{tabla}' no existe")
+                return None
+            
+            # Verificar si la columna existe
+            result = conn.execute(text(f"""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = '{tabla}' AND column_name = '{columna_fecha}'
+            """))
+            if result.scalar() is None:
+                logger.warning(f"Columna '{columna_fecha}' no existe en tabla '{tabla}'")
+                return None
+            
+            # Obtener la fecha máxima
             result = conn.execute(text(f"SELECT MAX({columna_fecha}) FROM {tabla}"))
             fecha = result.scalar()
-        return fecha
+            logger.info(f"Última fecha en {tabla}.{columna_fecha}: {fecha}")
+            return fecha
     except Exception as e:
+        logger.error(f"Error obteniendo última inserción de {tabla}: {str(e)}")
         return None
 
 def verificar_duplicados(engine, df, table_name, id_column):
@@ -776,10 +795,10 @@ class StreamlitUI:
         col1, col2, col3 = st.columns([1,6,1])
         with col2:  
             tabla_map = {
-                "📊 Gestiones": "gestiones",
-                "📱 SMS": "sms",
-                "💰 Pagos": "pagos",
-                "📋 Bases": "bases"
+                "🧮 Carga de Gestiones": "gestiones",
+                "📲 Carga de SMS": "sms",
+                "💰 Carga de Pagos": "pagos",
+                "📋 Carga de Bases": "bases"
             }
             tabla = tabla_map.get(st.session_state.modulo_actual)
             if tabla:

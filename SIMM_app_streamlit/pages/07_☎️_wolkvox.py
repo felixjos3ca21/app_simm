@@ -4,6 +4,7 @@ from pathlib import Path
 from tkinter import Tk, filedialog
 from datetime import datetime
 from dotenv import load_dotenv
+from sqlalchemy import text
 from src.utils.data_ingestor_tip3 import DataIngestorTip3
 from assets.fondo import set_background
 from src.utils.data_ingestor_camp_3 import DataIngestorCamp3
@@ -93,6 +94,35 @@ def setup_logging():
     
     sys.excepthook = handle_exception
 
+def show_debug_info(processor, folder_path):
+    """Muestra información de debugging sobre el procesador y la carpeta"""
+    with st.expander("🔍 Información de Debug", expanded=False):
+        st.write(f"**Carpeta analizada:** `{folder_path}`")
+        st.write(f"**Tabla de control:** `{processor.control_table}`")
+        st.write(f"**Estado de conexión:** {'✅ Conectado' if processor.connection_status else '❌ Desconectado'}")
+        
+        # Verificar si las tablas existen
+        try:
+            with processor.engine.connect() as conn:
+                table_exists = conn.execute(text(f"""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = '{processor.control_table}'
+                    );
+                """)).scalar()
+                st.write(f"**Tabla de control existe:** {'✅ Sí' if table_exists else '❌ No'}")
+                
+                if table_exists:
+                    count_result = conn.execute(text(f"SELECT COUNT(*) FROM {processor.control_table}")).scalar()
+                    st.write(f"**Registros en tabla de control:** {count_result}")
+                    
+                    completed_count = conn.execute(text(f"SELECT COUNT(*) FROM {processor.control_table} WHERE estado = 'completado'")).scalar()
+                    failed_count = conn.execute(text(f"SELECT COUNT(*) FROM {processor.control_table} WHERE estado = 'fallido'")).scalar()
+                    st.write(f"**Archivos completados en BD:** {completed_count}")
+                    st.write(f"**Archivos fallidos en BD:** {failed_count}")
+        except Exception as e:
+            st.write(f"**Error consultando BD:** {str(e)}")
+
 def select_folder():
     """Abre explorador para seleccionar carpeta"""
     root = Tk()
@@ -169,6 +199,9 @@ def show_tipificacion_3_ui():
         with st.spinner("Analizando archivos..."):
             files = processor.get_files_to_process(st.session_state.selected_folder_tip3)
         
+        # Información de debugging
+        show_debug_info(processor, st.session_state.selected_folder_tip3)
+        
         # Estadísticas
         col1, col2, col3, col4 = st.columns(4)
         
@@ -182,7 +215,7 @@ def show_tipificacion_3_ui():
             st.metric("✅ Ya Procesados", len(files['processed']), delta=None)
         
         with col4:
-            total = len(files['new']) + len(files['failed'])
+            total = len(files['new'])
             st.metric("🎯 Total a Procesar", total, delta=None)
 
         # Detalles de archivos
@@ -215,13 +248,11 @@ def show_tipificacion_3_ui():
                 else:
                     st.info("No hay archivos procesados previamente")
 
-        # Botón de procesamiento
-        total_to_process = len(files['new']) + len(files['failed'])
-        
-        if total_to_process > 0:
+        # Botón de procesamiento - Solo archivos nuevos
+        if len(files['new']) > 0:
             st.markdown("<h2 class='section-header'>🚀 Procesamiento</h2>", unsafe_allow_html=True)
             
-            if st.button(f"🎯 Procesar {total_to_process} Archivos", type="primary", use_container_width=True, key="process_tip3"):
+            if st.button(f"🎯 Procesar {len(files['new'])} Archivos Nuevos", type="primary", use_container_width=True, key="process_tip3"):
                 
                 # Contenedor para el progreso
                 progress_container = st.container()
@@ -250,8 +281,10 @@ def show_tipificacion_3_ui():
                 successful = 0
                 failed = 0
                 total_processed = 0
+                total_to_process = len(files['new'])  # Solo archivos nuevos
+                results_list = []  # Para almacenar todos los resultados
                 
-                # Procesar archivos nuevos
+                # Solo procesar archivos nuevos
                 for i, filename in enumerate(files['new']):
                     total_processed += 1
                     progress = total_processed / total_to_process
@@ -268,42 +301,26 @@ def show_tipificacion_3_ui():
                     result = processor._process_single_file(
                         os.path.join(st.session_state.selected_folder_tip3, filename)
                     )
+                    results_list.append(result)
                     
                     if result['success']:
-                        successful += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Éxito: {result['records']} registros")
+                        if result.get('no_valid_records', False):
+                            # Caso especial: archivo sin registros válidos
+                            log_messages.append(
+                                f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Archivo sin registros válidos: "
+                                f"{result['error']}"
+                            )
+                            # No incrementar contador de éxitos/fallos
+                        else:
+                            successful += 1
+                            log_messages.append(
+                                f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Éxito: {result['records']} registros"
+                            )
                     else:
                         failed += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error: {result['error'][:100]}...")
-                    
-                    success_metric.metric("✅ Exitosos", successful)
-                    error_metric.metric("❌ Fallidos", failed)
-                
-                # Procesar archivos fallidos (reintentos)
-                for i, filename in enumerate(files['failed']):
-                    total_processed += 1
-                    progress = total_processed / total_to_process
-                    progress_bar.progress(progress)
-                    status_text.text(f"Reintentando archivo {i+1}/{len(files['failed'])}: {filename}")
-                    current_file.metric("🔄 Reintentando", filename)
-                    
-                    log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reintentando: {filename}")
-                    log_placeholder.markdown(
-                        f"<div class='log-container'>{'<br>'.join(log_messages[-10:])}</div>", 
-                        unsafe_allow_html=True
-                    )
-                    
-                    result = processor._process_single_file(
-                        os.path.join(st.session_state.selected_folder_tip3, filename),
-                        is_retry=True
-                    )
-                    
-                    if result['success']:
-                        successful += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Recuperado: {result['records']} registros")
-                    else:
-                        failed += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Falló nuevamente: {result['error'][:100]}...")
+                        log_messages.append(
+                            f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error: {result['error'][:100]}..."
+                        )
                     
                     success_metric.metric("✅ Exitosos", successful)
                     error_metric.metric("❌ Fallidos", failed)
@@ -312,16 +329,41 @@ def show_tipificacion_3_ui():
                 progress_bar.progress(1.0)
                 status_text.text("🎉 Procesamiento completado")
                 current_file.empty()
+
+                # Mostrar archivos sin registros válidos
+                empty_files = []
+                for r in results_list:
+                    if isinstance(r, dict) and r.get('no_valid_records', False):
+                        empty_files.append(r['filename'])
+
+                if empty_files:
+                    st.markdown("""
+                    <div class='warning-box'>
+                        <h3>⚠️ Archivos sin Registros Válidos</h3>
+                        <p>Los siguientes archivos no contenían registros con module='andes-movilidadtigo':</p>
+                        <ul>
+                    """, unsafe_allow_html=True)
+                    
+                    for filename in empty_files:
+                        st.markdown(f"<li>{filename}</li>", unsafe_allow_html=True)
+                    
+                    st.markdown("""
+                        </ul>
+                        <p>Estos archivos fueron procesados correctamente pero no agregaron registros a la base de datos.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 # Mostrar resumen final
-                if successful == total_to_process:
+                total_processed_successfully = successful + len(empty_files)
+                if total_processed_successfully == len(files['new']) and failed == 0:
                     st.markdown(f"""
                     <div class='success-box'>
                         <h3>🎉 Procesamiento Completado Exitosamente</h3>
                         <p><strong>Todos los archivos fueron procesados correctamente:</strong></p>
                         <ul>
-                            <li>✅ Archivos exitosos: {successful}</li>
-                            <li>📊 Total de archivos: {total_to_process}</li>
+                            <li>✅ Archivos con registros: {successful}</li>
+                            <li>⚠️ Archivos sin registros válidos: {len(empty_files)}</li>
+                            <li>📊 Total de archivos: {len(files['new'])}</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -333,7 +375,8 @@ def show_tipificacion_3_ui():
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total procesados: {total_to_process}</li>
+                            <li>⚠️ Archivos sin registros válidos: {len(empty_files)}</li>
+                            <li>📊 Total procesados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Recomendación:</strong> Revisa los logs para identificar los errores en los archivos fallidos.</p>
                     </div>
@@ -345,7 +388,8 @@ def show_tipificacion_3_ui():
                         <p><strong>Ningún archivo pudo ser procesado exitosamente:</strong></p>
                         <ul>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total intentados: {total_to_process}</li>
+                            <li>⚠️ Archivos sin registros válidos: {len(empty_files)}</li>
+                            <li>📊 Total intentados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Sugerencias:</strong></p>
                         <ul>
@@ -360,7 +404,16 @@ def show_tipificacion_3_ui():
                 if st.button("🔄 Procesar Nuevos Archivos", type="secondary", key="retry_tip3"):
                     st.rerun()
         
-        elif total_to_process == 0 and files['processed']:
+        # Botón separado para reprocesar archivos fallidos
+        if len(files['failed']) > 0:
+            st.markdown("<h2 class='section-header'>🔄 Reprocesar Archivos Fallidos</h2>", unsafe_allow_html=True)
+            st.warning(f"Hay {len(files['failed'])} archivos que fallaron previamente. ¿Deseas reintentarlos?")
+            
+            if st.button(f"🔄 Reintentar {len(files['failed'])} Archivos Fallidos", type="secondary", key="retry_failed_tip3"):
+                # Código similar al de arriba pero solo para archivos fallidos
+                st.info("Función de reprocesamiento de archivos fallidos - por implementar si se necesita")
+        
+        elif len(files['new']) == 0 and files['processed']:
             st.markdown("""
             <div class='info-box'>
                 <h3>ℹ️ Todos los Archivos Ya Están Procesados</h3>
@@ -450,6 +503,9 @@ def show_cdr5_ui():
         with st.spinner("Analizando archivos..."):
             files = processor.get_files_to_process(st.session_state.selected_folder_cdr5)
         
+        # Información de debugging
+        show_debug_info(processor, st.session_state.selected_folder_cdr5)
+        
         # Estadísticas
         col1, col2, col3, col4 = st.columns(4)
         
@@ -463,7 +519,7 @@ def show_cdr5_ui():
             st.metric("✅ Ya Procesados", len(files['processed']), delta=None)
         
         with col4:
-            total = len(files['new']) + len(files['failed'])
+            total = len(files['new'])
             st.metric("🎯 Total a Procesar", total, delta=None)
 
         # Detalles de archivos
@@ -497,12 +553,10 @@ def show_cdr5_ui():
                     st.info("No hay archivos procesados previamente")
 
         # Botón de procesamiento
-        total_to_process = len(files['new']) + len(files['failed'])
-        
-        if total_to_process > 0:
+        if len(files['new']) > 0:
             st.markdown("<h2 class='section-header'>🚀 Procesamiento</h2>", unsafe_allow_html=True)
             
-            if st.button(f"🎯 Procesar {total_to_process} Archivos", type="primary", use_container_width=True, key="process_cdr5"):
+            if st.button(f"🎯 Procesar {len(files['new'])} Archivos Nuevos", type="primary", use_container_width=True, key="process_cdr5"):
                 
                 # Contenedor para el progreso
                 progress_container = st.container()
@@ -531,12 +585,12 @@ def show_cdr5_ui():
                 successful = 0
                 failed = 0
                 total_processed = 0
+                results_list = []  # Para almacenar todos los resultados
                 
                 # Procesar archivos nuevos
                 for i, filename in enumerate(files['new']):
-                    results_list = [] 
                     total_processed += 1
-                    progress = total_processed / total_to_process
+                    progress = total_processed / len(files['new'])
                     progress_bar.progress(progress)
                     status_text.text(f"Procesando archivo nuevo {i+1}/{len(files['new'])}: {filename}")
                     current_file.metric("📁 Archivo Actual", filename)
@@ -593,39 +647,9 @@ def show_cdr5_ui():
                             <p>Estos archivos fueron procesados correctamente pero no agregaron registros a la base de datos.</p>
                         </div>
                         """, unsafe_allow_html=True)
+                # Solo procesamos archivos nuevos en el flujo principal
+                # Los archivos fallidos se pueden reprocesar por separado
                 
-                # Procesar archivos fallidos (reintentos)
-                for i, filename in enumerate(files['failed']):
-                    total_processed += 1
-                    progress = total_processed / total_to_process
-                    progress_bar.progress(progress)
-                    status_text.text(f"Reintentando archivo {i+1}/{len(files['failed'])}: {filename}")
-                    current_file.metric("🔄 Reintentando", filename)
-                    
-                    log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reintentando: {filename}")
-                    log_placeholder.markdown(
-                        f"<div class='log-container'>{'<br>'.join(log_messages[-10:])}</div>", 
-                        unsafe_allow_html=True
-                    )
-                    
-                    result = processor._process_single_file(
-                        os.path.join(st.session_state.selected_folder_cdr5, filename),
-                        is_retry=True
-                    )
-                    
-                    if result['success']:
-                        if result['empty_module']:
-                            log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⓘ Archivo sin registros válidos (module='andes-movilidadtigo')")
-                        else:
-                            successful += 1
-                            log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Recuperado: {result['records']} registros")
-                    else:
-                        failed += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Falló nuevamente: {result['error'][:100]}...")
-                    
-                    success_metric.metric("✅ Exitosos", successful)
-                    error_metric.metric("❌ Fallidos", failed)
-
                 # Finalizar procesamiento
                 progress_bar.progress(1.0)
                 status_text.text("🎉 Procesamiento completado")
@@ -692,14 +716,14 @@ def show_cdr5_ui():
 
 
                 # Mostrar resumen final
-                if successful == total_to_process:
+                if successful == len(files['new']):
                     st.markdown(f"""
                     <div class='success-box'>
                         <h3>🎉 Procesamiento Completado Exitosamente</h3>
                         <p><strong>Todos los archivos fueron procesados correctamente:</strong></p>
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
-                            <li>📊 Total de archivos: {total_to_process}</li>
+                            <li>📊 Total de archivos: {len(files['new'])}</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -711,7 +735,7 @@ def show_cdr5_ui():
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total procesados: {total_to_process}</li>
+                            <li>📊 Total procesados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Recomendación:</strong> Revisa los logs para identificar los errores en los archivos fallidos.</p>
                     </div>
@@ -723,7 +747,7 @@ def show_cdr5_ui():
                         <p><strong>Ningún archivo pudo ser procesado exitosamente:</strong></p>
                         <ul>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total intentados: {total_to_process}</li>
+                            <li>📊 Total intentados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Sugerencias:</strong></p>
                         <ul>
@@ -738,7 +762,7 @@ def show_cdr5_ui():
                 if st.button("🔄 Procesar Nuevos Archivos", type="secondary", key="retry_cdr5"):
                     st.rerun()
         
-        elif total_to_process == 0 and files['processed']:
+        elif len(files['new']) == 0 and files['processed']:
             st.markdown("""
             <div class='info-box'>
                 <h3>ℹ️ Todos los Archivos Ya Están Procesados</h3>
@@ -828,6 +852,9 @@ def show_asesor_2_ui():
         with st.spinner("Analizando archivos..."):
             files = processor.get_files_to_process(st.session_state.selected_folder_ase2)
         
+        # Información de debugging
+        show_debug_info(processor, st.session_state.selected_folder_ase2)
+        
         # Estadísticas
         col1, col2, col3, col4 = st.columns(4)
         
@@ -841,7 +868,7 @@ def show_asesor_2_ui():
             st.metric("✅ Ya Procesados", len(files['processed']), delta=None)
         
         with col4:
-            total = len(files['new']) + len(files['failed'])
+            total = len(files['new'])
             st.metric("🎯 Total a Procesar", total, delta=None)
 
         # Detalles de archivos
@@ -874,13 +901,11 @@ def show_asesor_2_ui():
                 else:
                     st.info("No hay archivos procesados previamente")
 
-        # Botón de procesamiento
-        total_to_process = len(files['new']) + len(files['failed'])
-        
-        if total_to_process > 0:
+        # Botón de procesamiento  
+        if len(files['new']) > 0:
             st.markdown("<h2 class='section-header'>🚀 Procesamiento</h2>", unsafe_allow_html=True)
             
-            if st.button(f"🎯 Procesar {total_to_process} Archivos", type="primary", use_container_width=True, key="process_ase2"):
+            if st.button(f"🎯 Procesar {len(files['new'])} Archivos Nuevos", type="primary", use_container_width=True, key="process_ase2"):
                 
                 # Contenedor para el progreso
                 progress_container = st.container()
@@ -914,7 +939,7 @@ def show_asesor_2_ui():
                 for i, filename in enumerate(files['new']):
                     results_list = [] 
                     total_processed += 1
-                    progress = total_processed / total_to_process
+                    progress = total_processed / len(files['new'])
                     progress_bar.progress(progress)
                     status_text.text(f"Procesando archivo nuevo {i+1}/{len(files['new'])}: {filename}")
                     current_file.metric("📁 Archivo Actual", filename)
@@ -972,38 +997,9 @@ def show_asesor_2_ui():
                         </div>
                         """, unsafe_allow_html=True)
                 
-                # Procesar archivos fallidos (reintentos)
-                for i, filename in enumerate(files['failed']):
-                    total_processed += 1
-                    progress = total_processed / total_to_process
-                    progress_bar.progress(progress)
-                    status_text.text(f"Reintentando archivo {i+1}/{len(files['failed'])}: {filename}")
-                    current_file.metric("🔄 Reintentando", filename)
-                    
-                    log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reintentando: {filename}")
-                    log_placeholder.markdown(
-                        f"<div class='log-container'>{'<br>'.join(log_messages[-10:])}</div>", 
-                        unsafe_allow_html=True
-                    )
-                    
-                    result = processor._process_single_file(
-                        os.path.join(st.session_state.selected_folder_ase2, filename),
-                        is_retry=True
-                    )
-                    
-                    if result['success']:
-                        if result.get('no_valid_records', False):
-                            log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⓘ Archivo sin registros válidos (module='andes-movilidadtigo')")
-                        else:
-                            successful += 1
-                            log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Recuperado: {result['records']} registros")
-                    else:
-                        failed += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Falló nuevamente: {result['error'][:100]}...")
-                    
-                    success_metric.metric("✅ Exitosos", successful)
-                    error_metric.metric("❌ Fallidos", failed)
-
+                # Solo procesamos archivos nuevos en el flujo principal
+                # Los archivos fallidos se pueden reprocesar por separado
+                
                 # Finalizar procesamiento
                 progress_bar.progress(1.0)
                 status_text.text("🎉 Procesamiento completado")
@@ -1067,14 +1063,14 @@ def show_asesor_2_ui():
                     
 
                 # Mostrar resumen final
-                if successful == total_to_process:
+                if successful == len(files['new']):
                     st.markdown(f"""
                     <div class='success-box'>
                         <h3>🎉 Procesamiento Completado Exitosamente</h3>
                         <p><strong>Todos los archivos fueron procesados correctamente:</strong></p>
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
-                            <li>📊 Total de archivos: {total_to_process}</li>
+                            <li>📊 Total de archivos: {len(files['new'])}</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1086,7 +1082,7 @@ def show_asesor_2_ui():
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total procesados: {total_to_process}</li>
+                            <li>📊 Total procesados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Recomendación:</strong> Revisa los logs para identificar los errores en los archivos fallidos.</p>
                     </div>
@@ -1098,7 +1094,7 @@ def show_asesor_2_ui():
                         <p><strong>Ningún archivo pudo ser procesado exitosamente:</strong></p>
                         <ul>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total intentados: {total_to_process}</li>
+                            <li>📊 Total intentados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Sugerencias:</strong></p>
                         <ul>
@@ -1113,7 +1109,7 @@ def show_asesor_2_ui():
                 if st.button("🔄 Procesar Nuevos Archivos", type="secondary", key="retry_ase2"):
                     st.rerun()
         
-        elif total_to_process == 0 and files['processed']:
+        elif len(files['new']) == 0 and files['processed']:
             st.markdown("""
             <div class='info-box'>
                 <h3>ℹ️ Todos los Archivos Ya Están Procesados</h3>
@@ -1204,6 +1200,9 @@ def show_campana_ui():
         with st.spinner("Analizando archivos..."):
             files = processor.get_files_to_process(st.session_state.selected_folder_camp3)
         
+        # Información de debugging
+        show_debug_info(processor, st.session_state.selected_folder_camp3)
+        
         # Estadísticas
         col1, col2, col3, col4 = st.columns(4)
         
@@ -1217,7 +1216,7 @@ def show_campana_ui():
             st.metric("✅ Ya Procesados", len(files['processed']), delta=None)
         
         with col4:
-            total = len(files['new']) + len(files['failed'])
+            total = len(files['new'])
             st.metric("🎯 Total a Procesar", total, delta=None)
 
         # Detalles de archivos
@@ -1251,12 +1250,10 @@ def show_campana_ui():
                     st.info("No hay archivos procesados previamente")
 
         # Botón de procesamiento
-        total_to_process = len(files['new']) + len(files['failed'])
-        
-        if total_to_process > 0:
+        if len(files['new']) > 0:
             st.markdown("<h2 class='section-header'>🚀 Procesamiento</h2>", unsafe_allow_html=True)
             
-            if st.button(f"🎯 Procesar {total_to_process} Archivos", type="primary", use_container_width=True, key="process_camp3"):
+            if st.button(f"🎯 Procesar {len(files['new'])} Archivos Nuevos", type="primary", use_container_width=True, key="process_camp3"):
                 
                 # Contenedor para el progreso
                 progress_container = st.container()
@@ -1285,11 +1282,12 @@ def show_campana_ui():
                 successful = 0
                 failed = 0
                 total_processed = 0
+                results_list = []  # Para almacenar todos los resultados
                 
                 # Procesar archivos nuevos
                 for i, filename in enumerate(files['new']):
                     total_processed += 1
-                    progress = total_processed / total_to_process
+                    progress = total_processed / len(files['new'])
                     progress_bar.progress(progress)
                     status_text.text(f"Procesando archivo nuevo {i+1}/{len(files['new'])}: {filename}")
                     current_file.metric("📁 Archivo Actual", filename)
@@ -1304,6 +1302,7 @@ def show_campana_ui():
                     result = processor._process_single_file(
                         os.path.join(st.session_state.selected_folder_camp3, filename)
                     )
+                    results_list.append(result)
 
                     if result['success']:
                         if result['empty_module']:
@@ -1315,49 +1314,23 @@ def show_campana_ui():
                         failed += 1
                         log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error: {result['error'][:100]}...")
                 
-                # Procesar archivos fallidos (reintentos)
-                for i, filename in enumerate(files['failed']):
-                    total_processed += 1
-                    progress = total_processed / total_to_process
-                    progress_bar.progress(progress)
-                    status_text.text(f"Reintentando archivo {i+1}/{len(files['failed'])}: {filename}")
-                    current_file.metric("🔄 Reintentando", filename)
-                    
-                    log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reintentando: {filename}")
-                    log_placeholder.markdown(
-                        f"<div class='log-container'>{'<br>'.join(log_messages[-10:])}</div>", 
-                        unsafe_allow_html=True
-                    )
-                    
-                    result = processor._process_single_file(
-                        os.path.join(st.session_state.selected_folder_camp3, filename),
-                        is_retry=True
-                    )
-                    
-                    if result['success']:
-                        successful += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Recuperado: {result['records']} registros")
-                    else:
-                        failed += 1
-                        log_messages.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Falló nuevamente: {result['error'][:100]}...")
-                    
-                    success_metric.metric("✅ Exitosos", successful)
-                    error_metric.metric("❌ Fallidos", failed)
-
+                # Solo procesamos archivos nuevos en el flujo principal
+                # Los archivos fallidos se pueden reprocesar por separado
+                
                 # Finalizar procesamiento
                 progress_bar.progress(1.0)
                 status_text.text("🎉 Procesamiento completado")
                 current_file.empty()
                 
                 # Mostrar resumen final
-                if successful == total_to_process:
+                if successful == len(files['new']):
                     st.markdown(f"""
                     <div class='success-box'>
                         <h3>🎉 Procesamiento Completado Exitosamente</h3>
                         <p><strong>Todos los archivos fueron procesados correctamente:</strong></p>
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
-                            <li>📊 Total de archivos: {total_to_process}</li>
+                            <li>📊 Total de archivos: {len(files['new'])}</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1369,7 +1342,7 @@ def show_campana_ui():
                         <ul>
                             <li>✅ Archivos exitosos: {successful}</li>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total procesados: {total_to_process}</li>
+                            <li>📊 Total procesados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Recomendación:</strong> Revisa los logs para identificar los errores en los archivos fallidos.</p>
                     </div>
@@ -1381,7 +1354,7 @@ def show_campana_ui():
                         <p><strong>Ningún archivo pudo ser procesado exitosamente:</strong></p>
                         <ul>
                             <li>❌ Archivos fallidos: {failed}</li>
-                            <li>📊 Total intentados: {total_to_process}</li>
+                            <li>📊 Total intentados: {len(files['new'])}</li>
                         </ul>
                         <p><strong>Sugerencias:</strong></p>
                         <ul>
@@ -1396,7 +1369,7 @@ def show_campana_ui():
                 if st.button("🔄 Procesar Nuevos Archivos", type="secondary", key="retry_camp3"):
                     st.rerun()
         
-        elif total_to_process == 0 and files['processed']:
+        elif len(files['new']) == 0 and files['processed']:
             st.markdown("""
             <div class='info-box'>
                 <h3>ℹ️ Todos los Archivos Ya Están Procesados</h3>

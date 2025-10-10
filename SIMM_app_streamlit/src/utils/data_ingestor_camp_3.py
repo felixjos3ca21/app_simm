@@ -239,6 +239,26 @@ class DataIngestorCamp3:
             
             # Si el DataFrame está vacío porque no había registros con el módulo
             if len(df) == 0:
+                # Registrar en tabla de control como procesado con 0 registros
+                try:
+                    with self.engine.begin() as conn:
+                        conn.execute(
+                            text(f"""
+                                INSERT INTO {self.control_table} 
+                                (nombre_archivo, registros_insertados, estado, error_message) 
+                                VALUES (:filename, 0, 'completado', 'Archivo sin registros con module=andes-movilidadtigo')
+                                ON CONFLICT (nombre_archivo) DO UPDATE SET
+                                    registros_insertados = 0,
+                                    estado = 'completado',
+                                    error_message = 'Archivo sin registros con module=andes-movilidadtigo',
+                                    fecha_procesado = CURRENT_TIMESTAMP,
+                                    intentos = {self.control_table}.intentos + 1
+                            """),
+                            {'filename': file_name}
+                        )
+                except Exception as e:
+                    logging.error(f"Error registrando archivo vacío en tabla de control: {str(e)}")
+                
                 result['success'] = True
                 result['records'] = 0
                 result['empty_module'] = True
@@ -316,30 +336,69 @@ class DataIngestorCamp3:
     def get_files_to_process(self, folder_path: str) -> Dict[str, List[str]]:
         """Identifica archivos nuevos y fallidos para procesar"""
         try:
+            logging.info(f"Analizando archivos en carpeta: {folder_path}")
+            
             # Obtener todos los archivos CSV
             all_files = [
                 f for f in os.listdir(folder_path) 
                 if f.lower().endswith('.csv') and os.path.isfile(os.path.join(folder_path, f))
             ]
             
+            logging.info(f"Archivos CSV encontrados: {len(all_files)}")
+            if len(all_files) > 0:
+                logging.info(f"Primeros archivos: {all_files[:5]}")
+            
             if not all_files:
                 return {'new': [], 'failed': [], 'processed': []}
             
             # Consultar estado en base de datos
-            with self.engine.connect() as conn:
-                processed = pd.read_sql(
-                    f"SELECT nombre_archivo FROM {self.control_table} WHERE estado = 'completado'", 
-                    conn
-                )['nombre_archivo'].tolist()
-                
-                failed = pd.read_sql(
-                    f"SELECT nombre_archivo FROM {self.control_table} WHERE estado = 'fallido'", 
-                    conn
-                )['nombre_archivo'].tolist()
+            processed = []
+            failed = []
             
+            try:
+                with self.engine.connect() as conn:
+                    # Verificar que la tabla de control existe
+                    table_exists = conn.execute(text(f"""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_name = '{self.control_table}'
+                        );
+                    """)).scalar()
+                    
+                    if not table_exists:
+                        logging.warning(f"Tabla de control {self.control_table} no existe. Todos los archivos serán considerados nuevos.")
+                        return {'new': all_files, 'failed': [], 'processed': []}
+                    
+                    # Consultar archivos procesados
+                    processed_result = conn.execute(text(f"""
+                        SELECT nombre_archivo 
+                        FROM {self.control_table} 
+                        WHERE estado = 'completado'
+                    """))
+                    processed = [row[0] for row in processed_result]
+                    
+                    # Consultar archivos fallidos
+                    failed_result = conn.execute(text(f"""
+                        SELECT nombre_archivo 
+                        FROM {self.control_table} 
+                        WHERE estado = 'fallido'
+                    """))
+                    failed = [row[0] for row in failed_result]
+                    
+                    logging.info(f"Archivos procesados en BD: {len(processed)}")
+                    logging.info(f"Archivos fallidos en BD: {len(failed)}")
+                    
+            except Exception as db_error:
+                logging.error(f"Error consultando base de datos: {str(db_error)}")
+                # En caso de error de BD, consideramos todos como nuevos por seguridad
+                return {'new': all_files, 'failed': [], 'processed': []}
+            
+            # Clasificar archivos
             new_files = [f for f in all_files if f not in processed and f not in failed]
             failed_files = [f for f in failed if f in all_files]
             processed_files = [f for f in processed if f in all_files]
+            
+            logging.info(f"Clasificación final - Nuevos: {len(new_files)}, Fallidos: {len(failed_files)}, Procesados: {len(processed_files)}")
             
             return {
                 'new': new_files, 
@@ -349,4 +408,6 @@ class DataIngestorCamp3:
             
         except Exception as e:
             logging.error(f"Error identificando archivos: {str(e)}")
-            return {'new': [], 'failed': [], 'processed': []}
+            logging.error(f"Traceback: {traceback.format_exc()}")
+            # En caso de error, devolver todos como nuevos por seguridad
+            return {'new': all_files if 'all_files' in locals() else [], 'failed': [], 'processed': []}
