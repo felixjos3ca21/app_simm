@@ -40,7 +40,7 @@ df_pagos["FECHA SENCILLA"] = pd.to_datetime(df_pagos["FECHA SENCILLA"], dayfirst
 # Filtrar pagos con "APLICA" 
 df_pagos = df_pagos[
     (df_pagos["APLICACIÓN FINAL"] == "APLICA") &
-    (df_pagos["FECHA SENCILLA"] >= "2025-10-09") ## MODIFICAR A DIARIO ######
+    (df_pagos["FECHA SENCILLA"] >= "2025-10-10") ## MODIFICAR A DIARIO ######
 ].copy()
 
 # Filtrar gestiones válidas

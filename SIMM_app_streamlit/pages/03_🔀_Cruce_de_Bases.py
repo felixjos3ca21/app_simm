@@ -68,8 +68,11 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         df['fechapago'] = df['fechapago'].dt.date
 
         from datetime import date
-        fecha_minima = date(2025, 8, 1)
+
+        fecha_minima = date(2025, 8, 1) # editar a tu necesidad ###################
+
         df = df[df['fechapago'] >= fecha_minima]
+
         
         fecha_fin = fecha_fin + timedelta(days=1)
         #fecha_inicio_base = date.today() - relativedelta(months=6)
@@ -272,14 +275,17 @@ def ejecutar_cruce(df_input, fecha_inicio, fecha_fin):
         mask_sin_base = df_final['base_final'] == 'Sin Base Asociada'
         mask_tllamada = df_final['tipollamada_final'].str.lower().isin(['whatsapp', 'chat alcaldia', 'entrante'])
         df_final.loc[mask_sin_base & mask_tllamada, 'base_final'] = df_final.loc[mask_sin_base & mask_tllamada, 'tipollamada_final']
-        # (Alinear base_final_limpia ya se realizó arriba en bloque único)
+        
+        # IMPORTANTE: Llenar base_final_limpia con base_final DESPUÉS de todas las modificaciones a base_final
+        df_final['base_final_limpia'] = df_final['base_final_limpia'].fillna(df_final['base_final'])
+
+
 
         # Columnas finales únicas
         columnas_finales = [
             'fecha_gestion_final', 'id_gestion_final', 'resultado_final', 'archivo_final',
             'tipollamada_final', 'tipo_chat_final',
             'sms_final', 'base_final', 'fecha_entrega_final',
-            # añadido para exponer base limpia final
             'base_final_limpia'
         ]
         return df_final[original_cols + nuevas_cols + columnas_finales]

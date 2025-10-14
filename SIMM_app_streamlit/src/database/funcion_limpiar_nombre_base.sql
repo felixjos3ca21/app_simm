@@ -23,6 +23,7 @@ BEGIN
         WHEN valor_base = 'CAMPAÑA DCTO 25%' THEN '25% DCTO'
         WHEN valor_base = 'DCTO 25%_HASTA EL 26 FEB' THEN '25% DCTO'
         WHEN valor_base = 'DCTO 25%_HASTA EL 05 MARZO' THEN '25% DCTO'
+		WHEN valor_base = '25% DCTO' THEN '25% DCTO'
         
         -- ============ 50% DCTO ============
         WHEN valor_base = '50% DCTO' THEN '50% DCTO'
@@ -39,7 +40,7 @@ BEGIN
         WHEN valor_base = 'AP VIGENTES CUOTAS VIGENTES' THEN 'AP VIGENTES'
         WHEN valor_base = 'AP VIGENTE' THEN 'AP VIGENTES'
         WHEN valor_base = 'AP_VIGENTE' THEN 'AP VIGENTES'
-        
+        WHEN valor_base = 'AP CUOTAS VENCIDAS' THEN 'AP VIGENTES'
         -- ============ APIS ============
         WHEN valor_base = 'APIS' THEN 'APIS'
         WHEN valor_base = 'APIS CONTRACTUALES' THEN 'APIS'
@@ -106,6 +107,7 @@ BEGIN
 		WHEN valor_base = 'NUEVOS MOROSOS COMPRA DE DATOS' THEN 'BD MOROSOS'
         WHEN valor_base = 'NUEVOS MOROSOS COACTIVOS' THEN 'BD MOROSOS'
         WHEN valor_base = 'RECIEN CONFORMADOS (NUEVOS MOROSOS)' THEN 'BD MOROSOS'
+		WHEN valor_base = 'MOROSOS' THEN 'BD MOROSOS'
         
         -- ============ CADUCIDADES ============
         WHEN valor_base = 'CADUCIDADES' THEN 'CADUCIDADES'
@@ -172,6 +174,7 @@ BEGIN
         WHEN valor_base = 'REPORTE DE INGRESOS Y RETIROS DE LOS VEHICULOS' THEN 'INFRACCIONES VEHICULOS ENTREGADOS'
         WHEN valor_base = 'RETENCION Y ENTREGA DE VEHICULOS' THEN 'INFRACCIONES VEHICULOS ENTREGADOS'
         WHEN valor_base = 'VEHÍCULOS ENTREGADOS SIN PAGO DE COMPARENDO' THEN 'INFRACCIONES VEHICULOS ENTREGADOS'
+		WHEN valor_base = 'VEHICULOS RETENIDOS' THEN 'INFRACCIONES VEHICULOS ENTREGADOS'
         
         -- ============ NO GESTIONADO ============
         WHEN valor_base = 'NO GESTIONADO' THEN 'NO GESTIONADO'
@@ -213,6 +216,7 @@ SET base_cleaned = limpiar_base(base);
 -- Crear índice para mejor rendimiento
 CREATE INDEX IF NOT EXISTS idx_bases_cleaned ON bases(base_cleaned);
 
+
 SELECT Base_cleaned, count(*) as cantidad
 from bases
 GROUP by Base_cleaned
@@ -221,7 +225,7 @@ ORDER by cantidad DESC
 SELECT base, count(*) as cantidad
 from bases
 where	bases.fecha_entrega >= '2025-10-01'
-	and bases.fecha_entrega <= '2025-10-09'
+	and bases.fecha_entrega <= '2025-10-10'
 GROUP by base
 ORDER by cantidad DESC
 
